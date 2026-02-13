@@ -47,6 +47,6 @@ class OpenAILLM(LLMProvider):
             stream=True,
         )
 
-        for chunk in stream:  # type: ignore
+        for chunk in stream:
             if chunk.choices[0].delta.content is not None:  # type: ignore
                 yield chunk.choices[0].delta.content  # type: ignore

@@ -21,7 +21,7 @@ class AnthropicLLM(LLMProvider):
             messages=[{"role": "user", "content": prompt}],
             system=system_prompt or "",
         )
-        return str(response.content[0].text)
+        return str(response.content[0].text)  # type: ignore
 
     def stream(self, prompt: str, system_prompt: Optional[str] = None) -> Iterator[str]:
         messages = [{"role": "user", "content": prompt}]
@@ -30,8 +30,8 @@ class AnthropicLLM(LLMProvider):
             model=self.config.model,
             max_tokens=self.config.max_tokens,
             temperature=self.config.temperature,
-            system=system_prompt,
-            messages=messages,
+            system=system_prompt or "",
+            messages=messages,  # type: ignore
         ) as stream:
             for text in stream.text_stream:
                 yield text

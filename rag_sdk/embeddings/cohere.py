@@ -17,10 +17,10 @@ class CohereEmbedding(EmbeddingProvider):
         response = self.client.embed(
             texts=texts, model=self.config.model, input_type=self.config.input_type
         )
-        return response.embeddings
+        return response.embeddings  # type: ignore
 
     def embed_query(self, text: str) -> List[float]:
         response = self.client.embed(
             texts=[text], model=self.config.model, input_type="search_query"
         )
-        return response.embeddings[0]
+        return list(response.embeddings)[0]  # type: ignore

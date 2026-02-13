@@ -12,10 +12,10 @@ class InMemoryVectorStore(VectorStoreProvider):
 
     def __init__(self) -> None:
         self.documents: Dict[str, Document] = {}
-        self.embeddings: Dict[str, np.ndarray] = {}
+        self.embeddings: Dict[str, np.ndarray[Any, Any]] = {}
         # We also keep lists for faster vector operations
         self._id_list: List[str] = []
-        self._vector_matrix: Optional[np.ndarray] = None
+        self._vector_matrix: Optional[np.ndarray[Any, Any]] = None
 
     def add_documents(
         self, documents: List[Document], embeddings: List[List[float]]

@@ -14,13 +14,13 @@ class VoyageEmbedding(EmbeddingProvider):
         self.client = voyageai.Client(api_key=config.get_api_key())
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        response = self.client.embed(
+        result = self.client.embed(
             texts=texts, model=self.config.model, input_type="document"
         )
-        return response.embeddings
+        return result.embeddings  # type: ignore
 
     def embed_query(self, text: str) -> List[float]:
         response = self.client.embed(
             texts=[text], model=self.config.model, input_type="query"
         )
-        return response.embeddings[0]
+        return response.embeddings[0]  # type: ignore

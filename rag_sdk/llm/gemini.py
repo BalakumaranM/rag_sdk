@@ -1,7 +1,7 @@
 from typing import Optional, Iterator
 import google.generativeai as genai
 from .base import LLMProvider
-from ..config import GeminiConfig  # type: ignore
+from ..config import GeminiConfig
 
 
 class GeminiLLM(LLMProvider):
@@ -29,7 +29,7 @@ class GeminiLLM(LLMProvider):
 
         response = self.model.generate_content(
             full_prompt,
-            generation_config=genai.types.GenerationConfig(  # type: ignore
+            generation_config=genai.types.GenerationConfig(
                 temperature=self.config.temperature,
                 max_output_tokens=self.config.max_output_tokens,
             ),

@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional, Tuple
+from typing import List, Optional, Tuple, Any, Dict
 from .base import VectorStoreProvider
 from ..document import Document
 from ..config import PineconeConfig
@@ -30,7 +30,7 @@ class PineconeVectorStore(VectorStoreProvider):
         self,
         query_embedding: List[float],
         top_k: int = 5,
-        filters: Optional[Dict] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> List[Tuple[Document, float]]:
         # Stub implementation
         return []
