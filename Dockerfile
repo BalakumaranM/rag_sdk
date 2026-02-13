@@ -13,8 +13,9 @@ RUN apt-get update && apt-get install -y \
 # Copy project files
 COPY . .
 
-# Install the package in editable mode
-RUN pip install -e .
+# Upgrade pip and install the package in editable mode with a longer timeout
+RUN pip install --upgrade pip && \
+    pip install --default-timeout=100 -e ".[dev]"
 
 # Default command
 CMD ["python", "main.py"]
