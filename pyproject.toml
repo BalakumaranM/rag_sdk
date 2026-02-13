@@ -1,0 +1,27 @@
+[project]
+name = "rag_sdk"
+version = "0.1.0"
+description = "A modular RAG SDK"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+    "numpy>=1.24.0",
+    "openai>=1.0.0",
+    "tiktoken>=0.5.0",
+    "google-generativeai>=0.5.0",
+    "anthropic>=0.25.0",
+    "cohere>=5.0.0",
+    "voyageai>=0.2.0",
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.mypy]
+ignore_missing_imports = true
+explicit_package_bases = true
+namespace_packages = true
