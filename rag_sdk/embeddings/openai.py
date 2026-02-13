@@ -32,7 +32,7 @@ class OpenAIEmbedding(EmbeddingProvider):
             response = self.client.embeddings.create(
                 input=batch,
                 model=self.config.model,
-                dimensions=self.config.dimensions or openai.NOT_GIVEN,
+                dimensions=self.config.dimensions or openai.NOT_GIVEN,  # type: ignore
             )
 
             # Sort by index to ensure order is preserved (OpenAI usually preserves it)
@@ -49,6 +49,6 @@ class OpenAIEmbedding(EmbeddingProvider):
         response = self.client.embeddings.create(
             input=[text],
             model=self.config.model,
-            dimensions=self.config.dimensions or openai.NOT_GIVEN,
+            dimensions=self.config.dimensions or openai.NOT_GIVEN,  # type: ignore
         )
         return response.data[0].embedding
