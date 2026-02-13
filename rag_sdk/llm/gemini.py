@@ -1,7 +1,7 @@
 from typing import Optional, Iterator
 import google.generativeai as genai
 from .base import LLMProvider
-from ..config import GeminiConfig
+from ..config import GeminiConfig  # type: ignore
 
 
 class GeminiLLM(LLMProvider):
@@ -11,28 +11,30 @@ class GeminiLLM(LLMProvider):
 
     def __init__(self, config: GeminiConfig):
         self.config = config
-        genai.configure(api_key=config.get_api_key())
-        self.model = genai.GenerativeModel(config.model)
+        genai.configure(api_key=config.get_api_key())  # type: ignore
+        self.model = genai.GenerativeModel(config.model)  # type: ignore
         self.generation_config = genai.types.GenerationConfig(
             temperature=config.temperature, max_output_tokens=config.max_output_tokens
         )
 
     def generate(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        # Gemini handles system prompts differently or via the model config,
-        # but for simple chat, we can prepend it or use a chat session.
-        # For simplicity in this base implementation:
-
-        full_prompt = prompt
+        # construct prompt with system instruction if provided
         if system_prompt:
-            # Note: Gemini 1.5 allows system instructions in model init,
-            # but we initialized once. We can pass it if we re-instantiate or just prepend.
-            # Best practice for single turn:
-            full_prompt = f"System: {system_prompt}\nUser: {prompt}"
+            # Gemini supports system instructions in newer models, but for simplicity
+            # we'll prepend it to the prompt or use chat history if we were doing chat.
+            # Here we just prepend.
+            full_prompt = f"System: {system_prompt}\n\nUser: {prompt}"
+        else:
+            full_prompt = prompt
 
         response = self.model.generate_content(
-            full_prompt, generation_config=self.generation_config
+            full_prompt,
+            generation_config=genai.types.GenerationConfig(  # type: ignore
+                temperature=self.config.temperature,
+                max_output_tokens=self.config.max_output_tokens,
+            ),
         )
-        return response.text
+        return str(response.text)
 
     def stream(self, prompt: str, system_prompt: Optional[str] = None) -> Iterator[str]:
         full_prompt = prompt

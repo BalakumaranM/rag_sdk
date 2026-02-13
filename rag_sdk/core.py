@@ -1,5 +1,5 @@
 import time
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from .config import Config
 from .document import Document, TextSplitter
 from .embeddings import OpenAIEmbedding, EmbeddingProvider
@@ -23,30 +23,32 @@ class RAG:
         self.config = config
         self._init_components()
 
-    def _init_components(self):
+    def _init_components(self) -> None:
         # 1. Embeddings
         if self.config.embeddings.provider == "openai":
+            if not self.config.embeddings.openai:
+                raise ValueError("OpenAI embedding config is missing")
             self.embedding_provider: EmbeddingProvider = OpenAIEmbedding(
                 self.config.embeddings.openai
             )
         elif self.config.embeddings.provider == "cohere":
+            if not self.config.embeddings.cohere:
+                raise ValueError("Cohere embedding config is missing")
             from .embeddings import CohereEmbedding
 
-            self.embedding_provider: EmbeddingProvider = CohereEmbedding(
-                self.config.embeddings.cohere
-            )
+            self.embedding_provider = CohereEmbedding(self.config.embeddings.cohere)
         elif self.config.embeddings.provider == "gemini":
+            if not self.config.embeddings.gemini:
+                raise ValueError("Gemini embedding config is missing")
             from .embeddings import GeminiEmbedding
 
-            self.embedding_provider: EmbeddingProvider = GeminiEmbedding(
-                self.config.embeddings.gemini
-            )
+            self.embedding_provider = GeminiEmbedding(self.config.embeddings.gemini)
         elif self.config.embeddings.provider == "voyage":
+            if not self.config.embeddings.voyage:
+                raise ValueError("Voyage embedding config is missing")
             from .embeddings import VoyageEmbedding
 
-            self.embedding_provider: EmbeddingProvider = VoyageEmbedding(
-                self.config.embeddings.voyage
-            )
+            self.embedding_provider = VoyageEmbedding(self.config.embeddings.voyage)
         else:
             raise ValueError(
                 f"Unsupported embedding provider: {self.config.embeddings.provider}"
@@ -56,9 +58,9 @@ class RAG:
         if self.config.vectorstore.provider == "memory":
             self.vector_store: VectorStoreProvider = InMemoryVectorStore()
         elif self.config.vectorstore.provider == "pinecone":
-            self.vector_store: VectorStoreProvider = PineconeVectorStore(
-                self.config.vectorstore.pinecone
-            )
+            if not self.config.vectorstore.pinecone:
+                raise ValueError("Pinecone vector store config is missing")
+            self.vector_store = PineconeVectorStore(self.config.vectorstore.pinecone)
         else:
             raise ValueError(
                 f"Unsupported vector store provider: {self.config.vectorstore.provider}"
@@ -66,19 +68,27 @@ class RAG:
 
         # 3. LLM
         if self.config.llm.provider == "openai":
+            if not self.config.llm.openai:
+                raise ValueError("OpenAI LLM config is missing")
             self.llm_provider: LLMProvider = OpenAILLM(self.config.llm.openai)
         elif self.config.llm.provider == "gemini":
+            if not self.config.llm.gemini:
+                raise ValueError("Gemini LLM config is missing")
             from .llm import GeminiLLM
 
-            self.llm_provider: LLMProvider = GeminiLLM(self.config.llm.gemini)
+            self.llm_provider = GeminiLLM(self.config.llm.gemini)
         elif self.config.llm.provider == "anthropic":
+            if not self.config.llm.anthropic:
+                raise ValueError("Anthropic LLM config is missing")
             from .llm import AnthropicLLM
 
-            self.llm_provider: LLMProvider = AnthropicLLM(self.config.llm.anthropic)
+            self.llm_provider = AnthropicLLM(self.config.llm.anthropic)
         elif self.config.llm.provider == "cohere":
+            if not self.config.llm.cohere:
+                raise ValueError("Cohere LLM config is missing")
             from .llm import CohereLLM
 
-            self.llm_provider: LLMProvider = CohereLLM(self.config.llm.cohere)
+            self.llm_provider = CohereLLM(self.config.llm.cohere)
         else:
             raise ValueError(f"Unsupported LLM provider: {self.config.llm.provider}")
 
@@ -118,8 +128,11 @@ class RAG:
         return {"source_documents": len(documents), "chunks": len(splitted_docs)}
 
     def query(
-        self, query: str, top_k: Optional[int] = None, filters: Optional[Dict] = None
-    ) -> Dict:
+        self,
+        query: str,
+        top_k: Optional[int] = None,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """
         Query the RAG system.
         """

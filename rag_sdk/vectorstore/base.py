@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Optional
+from typing import List, Optional, Tuple, Dict, Any
 from ..document import Document
 
 
@@ -22,8 +22,8 @@ class VectorStoreProvider(ABC):
         self,
         query_embedding: List[float],
         top_k: int = 5,
-        filters: Optional[Dict] = None,
-    ) -> List[tuple[Document, float]]:
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> List[Tuple[Document, float]]:
         """
         Search for similar documents using the query embedding.
         Returns a list of (Document, score) tuples.

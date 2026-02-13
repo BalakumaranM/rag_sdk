@@ -1,4 +1,4 @@
-from typing import Optional, Iterator
+from typing import Optional, Iterator, List, Dict
 import openai
 from .base import LLMProvider
 from ..config import OpenAIConfig
@@ -15,7 +15,9 @@ class OpenAILLM(LLMProvider):
             api_key=config.get_api_key(), base_url=config.base_url
         )
 
-    def _prepare_messages(self, prompt: str, system_prompt: Optional[str] = None):
+    def _prepare_messages(
+        self, prompt: str, system_prompt: Optional[str] = None
+    ) -> List[Dict[str, str]]:
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -27,24 +29,24 @@ class OpenAILLM(LLMProvider):
 
         response = self.client.chat.completions.create(
             model=self.config.model,
-            messages=messages,
+            messages=messages,  # type: ignore
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
             stream=False,
         )
-        return response.choices[0].message.content or ""
+        return response.choices[0].message.content or ""  # type: ignore
 
     def stream(self, prompt: str, system_prompt: Optional[str] = None) -> Iterator[str]:
         messages = self._prepare_messages(prompt, system_prompt)
 
         stream = self.client.chat.completions.create(
             model=self.config.model,
-            messages=messages,
+            messages=messages,  # type: ignore
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
             stream=True,
         )
 
-        for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+        for chunk in stream:  # type: ignore
+            if chunk.choices[0].delta.content is not None:  # type: ignore
+                yield chunk.choices[0].delta.content  # type: ignore

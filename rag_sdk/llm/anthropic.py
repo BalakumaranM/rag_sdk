@@ -14,16 +14,14 @@ class AnthropicLLM(LLMProvider):
         self.client = anthropic.Anthropic(api_key=config.get_api_key())
 
     def generate(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        messages = [{"role": "user", "content": prompt}]
 
         response = self.client.messages.create(
             model=self.config.model,
             max_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
-            system=system_prompt,
-            messages=messages,
+            messages=[{"role": "user", "content": prompt}],
+            system=system_prompt or "",
         )
-        return response.content[0].text
+        return str(response.content[0].text)
 
     def stream(self, prompt: str, system_prompt: Optional[str] = None) -> Iterator[str]:
         messages = [{"role": "user", "content": prompt}]

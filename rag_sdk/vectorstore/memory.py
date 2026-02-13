@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 from .base import VectorStoreProvider
 from ..document import Document
 
@@ -10,7 +10,7 @@ class InMemoryVectorStore(VectorStoreProvider):
     Good for testing and small datasets.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.documents: Dict[str, Document] = {}
         self.embeddings: Dict[str, np.ndarray] = {}
         # We also keep lists for faster vector operations
@@ -33,7 +33,7 @@ class InMemoryVectorStore(VectorStoreProvider):
         # Rebuild matrix
         self._rebuild_matrix()
 
-    def _rebuild_matrix(self):
+    def _rebuild_matrix(self) -> None:
         if not self._id_list:
             self._vector_matrix = None
             return
@@ -45,7 +45,7 @@ class InMemoryVectorStore(VectorStoreProvider):
         self,
         query_embedding: List[float],
         top_k: int = 5,
-        filters: Optional[Dict] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> List[Tuple[Document, float]]:
         if self._vector_matrix is None:
             return []

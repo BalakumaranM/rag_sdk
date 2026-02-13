@@ -14,13 +14,10 @@ class CohereLLM(LLMProvider):
         self.client = cohere.Client(api_key=config.get_api_key())
 
     def generate(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        response = self.client.chat(
-            message=prompt,
-            preamble=system_prompt,
-            model=self.config.model,
-            temperature=self.config.temperature,
+        response = self.client.generate(
+            prompt=prompt, model=self.config.model, temperature=self.config.temperature
         )
-        return response.text
+        return str(response.generations[0].text)
 
     def stream(self, prompt: str, system_prompt: Optional[str] = None) -> Iterator[str]:
         stream = self.client.chat_stream(

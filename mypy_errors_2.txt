@@ -1,0 +1,22 @@
+rag_sdk/config/config.py:2: error: Library stubs not installed for "yaml"  [import-untyped]
+rag_sdk/config/config.py:2: note: Hint: "python3 -m pip install types-PyYAML"
+rag_sdk/config/config.py:2: note: (or run "mypy --install-types" to install all missing stub packages)
+rag_sdk/config/config.py:2: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+rag_sdk/llm/openai.py:34: error: Incompatible return value type (got "str | None", expected "str")  [return-value]
+rag_sdk/embeddings/openai.py:33: error: Argument "dimensions" to "create" of "Embeddings" has incompatible type "int | None"; expected "int | NotGiven"  [arg-type]
+rag_sdk/embeddings/openai.py:50: error: Argument "dimensions" to "create" of "Embeddings" has incompatible type "int | None"; expected "int | NotGiven"  [arg-type]
+rag_sdk/vectorstore/memory.py:12: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+rag_sdk/vectorstore/memory.py:13: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+rag_sdk/vectorstore/memory.py:15: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+rag_sdk/vectorstore/memory.py:16: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+rag_sdk/core.py:21: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+rag_sdk/core.py:24: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+rag_sdk/core.py:27: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+rag_sdk/core.py:30: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+rag_sdk/core.py:36: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+rag_sdk/core.py:38: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+rag_sdk/core.py:44: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+rag_sdk/core.py:47: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+rag_sdk/core.py:50: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+rag_sdk/core.py:53: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+Found 4 errors in 3 files (checked 26 source files)
