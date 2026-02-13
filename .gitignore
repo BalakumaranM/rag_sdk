@@ -37,3 +37,4 @@ wheels/
 .agent/
 git-hooks/
 mypy_errors.txt
+.agent/
