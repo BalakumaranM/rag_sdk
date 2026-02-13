@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from ..embeddings import EmbeddingProvider
 from ..vectorstore import VectorStoreProvider
 from ..document import Document
@@ -21,7 +21,7 @@ class Retriever:
         self.config = config
 
     def retrieve(
-        self, query: str, top_k: Optional[int] = None, filters: Optional[Dict] = None
+        self, query: str, top_k: int = 5, filters: Optional[Dict[str, Any]] = None
     ) -> List[Document]:
         """
         Retrieve documents relevant to the query.

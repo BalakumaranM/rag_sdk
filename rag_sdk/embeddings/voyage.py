@@ -11,7 +11,7 @@ class VoyageEmbedding(EmbeddingProvider):
 
     def __init__(self, config: VoyageEmbeddingConfig):
         self.config = config
-        self.client = voyageai.Client(api_key=config.get_api_key())
+        self.client = voyageai.Client(api_key=config.get_api_key())  # type: ignore
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         result = self.client.embed(

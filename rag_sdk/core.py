@@ -139,7 +139,9 @@ class RAG:
         start_time = time.time()
 
         # 1. Retrieve
-        retrieved_docs = self.retriever.retrieve(query, top_k, filters)
+        retrieved_docs = self.retriever.retrieve(
+            query, top_k=top_k or 5, filters=filters
+        )
 
         # 2. Generate
         context_text = "\n\n".join([doc.content for doc in retrieved_docs])
