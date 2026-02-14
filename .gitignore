@@ -35,6 +35,4 @@ wheels/
 
 # Project specific
 .agent/
-git-hooks/
 mypy_errors.txt
-.agent/
