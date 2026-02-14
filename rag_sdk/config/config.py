@@ -16,10 +16,30 @@ class LoggingConfig(BaseModel):
     retention: str = "30 days"
 
 
+class ChunkingConfig(BaseModel):
+    strategy: str = "recursive"  # "recursive", "agentic", "proposition"
+
+
+class AgenticChunkingConfig(BaseModel):
+    max_chunk_size: int = 1000
+    similarity_threshold: float = 0.5
+
+
+class PropositionChunkingConfig(BaseModel):
+    max_propositions_per_chunk: int = 5
+
+
 class DocumentProcessingConfig(BaseModel):
     chunk_size: int = 1000
     chunk_overlap: int = 200
     separators: List[str] = ["\n\n", "\n", ".", "!", "?", ",", " "]
+    chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
+    agentic_chunking: AgenticChunkingConfig = Field(
+        default_factory=AgenticChunkingConfig
+    )
+    proposition_chunking: PropositionChunkingConfig = Field(
+        default_factory=PropositionChunkingConfig
+    )
 
 
 class OpenAIEmbeddingConfig(BaseModel):
@@ -155,9 +175,41 @@ class LLMConfig(BaseModel):
     cohere: Optional[CohereConfig] = Field(default_factory=CohereConfig)
 
 
+class GraphRAGConfig(BaseModel):
+    max_entities_per_chunk: int = 10
+    max_relationships_per_chunk: int = 15
+
+
+class RAPTORConfig(BaseModel):
+    num_levels: int = 3
+    clustering_method: str = "kmeans"
+    max_clusters_per_level: int = 10
+
+
+class CorrectiveRAGConfig(BaseModel):
+    relevance_threshold: float = 0.7
+    max_refinement_attempts: int = 2
+
+
 class RetrievalConfig(BaseModel):
-    strategy: str = "dense"
+    strategy: str = "dense"  # "dense", "graph_rag", "raptor"
     top_k: int = 5
+    corrective_rag_enabled: bool = False
+    graph_rag: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
+    raptor: RAPTORConfig = Field(default_factory=RAPTORConfig)
+    corrective_rag: CorrectiveRAGConfig = Field(default_factory=CorrectiveRAGConfig)
+
+
+class GenerationConfig(BaseModel):
+    strategy: str = "standard"  # "standard", "cove", "attributed"
+
+
+class CoVeConfig(BaseModel):
+    max_verification_questions: int = 3
+
+
+class AttributedGenerationConfig(BaseModel):
+    citation_style: str = "numeric"  # "numeric"
 
 
 class Config(BaseModel):
@@ -171,6 +223,11 @@ class Config(BaseModel):
     vectorstore: VectorStoreConfig = Field(default_factory=VectorStoreConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
+    generation: GenerationConfig = Field(default_factory=GenerationConfig)
+    cove: CoVeConfig = Field(default_factory=CoVeConfig)
+    attributed_generation: AttributedGenerationConfig = Field(
+        default_factory=AttributedGenerationConfig
+    )
 
 
 class ConfigLoader:

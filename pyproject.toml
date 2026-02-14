@@ -26,6 +26,9 @@ dev = [
     "types-requests",
 ]
 
+[tool.setuptools.packages.find]
+include = ["rag_sdk*"]
+
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"

@@ -1,8 +1,9 @@
 from typing import List, Optional
+from .base import BaseTextSplitter
 from .models import Document
 
 
-class TextSplitter:
+class TextSplitter(BaseTextSplitter):
     """
     Splits text into chunks recursively based on separators.
     """

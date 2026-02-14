@@ -1,11 +1,12 @@
 from typing import List, Dict, Optional, Any
+from .base import BaseRetriever
 from ..embeddings import EmbeddingProvider
 from ..vectorstore import VectorStoreProvider
 from ..document import Document
 from ..config import RetrievalConfig
 
 
-class Retriever:
+class Retriever(BaseRetriever):
     """
     Retriever class that coordinates embedding and vector store search.
     """

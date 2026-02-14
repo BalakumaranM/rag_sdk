@@ -3,10 +3,17 @@ environment: "development"
 
 logging:
   level: "INFO"
-  
+
 document_processing:
   chunk_size: 1000
   chunk_overlap: 200
+  chunking:
+    strategy: "recursive"  # Options: recursive, agentic, proposition
+  # agentic_chunking:
+  #   max_chunk_size: 1000
+  #   similarity_threshold: 0.5
+  # proposition_chunking:
+  #   max_propositions_per_chunk: 5
 
 embeddings:
   provider: "openai" # Options: openai, cohere, gemini, voyage
@@ -37,5 +44,23 @@ llm:
   #   model: "command-r-plus"
 
 retrieval:
-  strategy: "dense"
+  strategy: "dense"  # Options: dense, graph_rag, raptor
   top_k: 5
+  corrective_rag_enabled: false
+  # graph_rag:
+  #   max_entities_per_chunk: 10
+  #   max_relationships_per_chunk: 15
+  # raptor:
+  #   num_levels: 3
+  #   clustering_method: "kmeans"
+  #   max_clusters_per_level: 10
+  # corrective_rag:
+  #   relevance_threshold: 0.7
+  #   max_refinement_attempts: 2
+
+generation:
+  strategy: "standard"  # Options: standard, cove, attributed
+# cove:
+#   max_verification_questions: 3
+# attributed_generation:
+#   citation_style: "numeric"
