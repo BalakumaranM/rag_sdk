@@ -35,5 +35,6 @@ wheels/
 
 # Project specific
 .agent/
+.claude/
 git-hooks/
 mypy_errors.txt
