@@ -10,10 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class PropositionSplitter(BaseTextSplitter):
-    """
-    Proposition-based chunking: uses an LLM to decompose text into atomic propositions,
-    then groups propositions into chunks of configurable size.
-    """
+    """Uses an LLM to decompose text into atomic propositions, then groups them into chunks."""
 
     def __init__(
         self,
@@ -24,7 +21,6 @@ class PropositionSplitter(BaseTextSplitter):
         self.max_propositions_per_chunk = max_propositions_per_chunk
 
     def _extract_propositions(self, text: str) -> List[str]:
-        """Use LLM to decompose text into atomic, self-contained propositions."""
         prompt = (
             "Decompose the following text into atomic, self-contained propositions. "
             "Each proposition should:\n"
@@ -54,13 +50,10 @@ class PropositionSplitter(BaseTextSplitter):
         return [s.strip() for s in sentences if s.strip()]
 
     def _group_propositions(self, propositions: List[str]) -> List[str]:
-        """Group propositions into chunks."""
-        chunks = []
-        for i in range(0, len(propositions), self.max_propositions_per_chunk):
-            group = propositions[i : i + self.max_propositions_per_chunk]
-            chunk = " ".join(group)
-            chunks.append(chunk)
-        return chunks
+        return [
+            " ".join(propositions[i : i + self.max_propositions_per_chunk])
+            for i in range(0, len(propositions), self.max_propositions_per_chunk)
+        ]
 
     def split_text(self, text: str) -> List[str]:
         if not text.strip():
@@ -73,18 +66,16 @@ class PropositionSplitter(BaseTextSplitter):
         return self._group_propositions(propositions)
 
     def split_documents(self, documents: List[Document]) -> List[Document]:
-        chunks = []
-        for doc in documents:
-            text_chunks = self.split_text(doc.content)
-            for i, text in enumerate(text_chunks):
-                new_doc = Document(
-                    content=text,
-                    metadata={
-                        **doc.metadata,
-                        "chunk_index": i,
-                        "parent_id": doc.id,
-                        "chunking_strategy": "proposition",
-                    },
-                )
-                chunks.append(new_doc)
-        return chunks
+        return [
+            Document(
+                content=text,
+                metadata={
+                    **doc.metadata,
+                    "chunk_index": i,
+                    "parent_id": doc.id,
+                    "chunking_strategy": "proposition",
+                },
+            )
+            for doc in documents
+            for i, text in enumerate(self.split_text(doc.content))
+        ]

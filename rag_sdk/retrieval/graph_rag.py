@@ -29,11 +29,7 @@ class Relationship:
 
 
 class GraphRAGRetriever(BaseRetriever):
-    """
-    Graph RAG retriever that maintains an in-memory knowledge graph.
-    Extracts entities and relationships from documents using LLM,
-    then combines graph traversal with dense retrieval for queries.
-    """
+    """Combines in-memory knowledge graph traversal with dense retrieval."""
 
     def __init__(
         self,
@@ -53,7 +49,6 @@ class GraphRAGRetriever(BaseRetriever):
     def _extract_entities_and_relationships(
         self, text: str, document_id: str
     ) -> Tuple[List[Entity], List[Relationship]]:
-        """Use LLM to extract entities and relationships from text."""
         max_entities = self.config.graph_rag.max_entities_per_chunk
         max_rels = self.config.graph_rag.max_relationships_per_chunk
 
@@ -95,7 +90,6 @@ class GraphRAGRetriever(BaseRetriever):
         return [], []
 
     def build_graph(self, documents: List[Document]) -> None:
-        """Build the knowledge graph from documents. Called during ingestion."""
         for doc in documents:
             entities, relationships = self._extract_entities_and_relationships(
                 doc.content, doc.id
@@ -125,7 +119,6 @@ class GraphRAGRetriever(BaseRetriever):
         )
 
     def _extract_query_entities(self, query: str) -> List[str]:
-        """Extract entity names from query using LLM."""
         prompt = (
             "Extract the key entity names from this query. "
             "Return ONLY a JSON array of lowercase strings.\n\n"
@@ -148,7 +141,6 @@ class GraphRAGRetriever(BaseRetriever):
     def _get_graph_document_ids(
         self, query_entities: List[str], max_hops: int = 2
     ) -> Set[str]:
-        """Traverse graph from query entities to find relevant document IDs."""
         relevant_ids: Set[str] = set()
         visited: Set[str] = set()
 

@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 def _kmeans(vectors: np.ndarray, k: int, max_iter: int = 50) -> np.ndarray:
-    """Simple k-means clustering using numpy. Returns cluster assignments."""
     n = vectors.shape[0]
     if n <= k:
         return np.arange(n)
@@ -42,11 +41,7 @@ def _kmeans(vectors: np.ndarray, k: int, max_iter: int = 50) -> np.ndarray:
 
 
 class RAPTORRetriever(BaseRetriever):
-    """
-    RAPTOR retriever: builds a hierarchical tree of document summaries.
-    Clusters chunks at each level using k-means, generates LLM summaries per cluster,
-    stores summaries as new documents with level metadata, and searches across all levels.
-    """
+    """Builds a hierarchical tree of clustered document summaries for multi-level retrieval."""
 
     def __init__(
         self,
@@ -61,9 +56,7 @@ class RAPTORRetriever(BaseRetriever):
         self.config = config
 
     def _summarize_cluster(self, texts: List[str]) -> str:
-        """Generate a summary for a cluster of texts using LLM."""
         combined = "\n\n---\n\n".join(texts)
-        # Truncate if too long to avoid exceeding context window
         if len(combined) > 8000:
             combined = combined[:8000] + "..."
 
@@ -82,10 +75,6 @@ class RAPTORRetriever(BaseRetriever):
             return " ".join(t.split(".")[0] + "." for t in texts[:3])
 
     def build_tree(self, documents: List[Document]) -> None:
-        """
-        Build RAPTOR tree. Called during ingestion after documents are stored.
-        Clusters documents, generates summaries, and stores them in the vector store.
-        """
         num_levels = self.config.raptor.num_levels
         max_clusters = self.config.raptor.max_clusters_per_level
 
@@ -146,29 +135,25 @@ class RAPTORRetriever(BaseRetriever):
     def retrieve(
         self, query: str, top_k: int = 5, filters: Optional[Dict[str, Any]] = None
     ) -> List[Document]:
-        """Search across all tree levels and merge results."""
         query_embedding = self.embedding_provider.embed_query(query)
-
-        # Search with higher top_k to get results from multiple levels
         results = self.vector_store.search(
             query_embedding=query_embedding,
             top_k=top_k * 2,
             filters=filters,
         )
 
-        # Prefer leaf-level (original) documents but include summaries for context
-        leaf_docs = []
-        summary_docs = []
-        for doc, score in results:
-            if doc.metadata.get("raptor_level"):
-                summary_docs.append((doc, score))
-            else:
-                leaf_docs.append((doc, score))
+        leaf_docs = [
+            (doc, score)
+            for doc, score in results
+            if not doc.metadata.get("raptor_level")
+        ]
+        summary_docs = [
+            (doc, score) for doc, score in results if doc.metadata.get("raptor_level")
+        ]
 
-        # Combine: prioritize leaf docs, fill remaining with summaries
         combined = leaf_docs[:top_k]
         remaining = top_k - len(combined)
         if remaining > 0:
             combined.extend(summary_docs[:remaining])
 
-        return [doc for doc, score in combined]
+        return [doc for doc, _ in combined]

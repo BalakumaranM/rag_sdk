@@ -10,11 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class AgenticSplitter(BaseTextSplitter):
-    """
-    Agentic chunking: uses an LLM to determine semantic boundaries in text.
-    Pre-splits into sentences, then asks the LLM to identify chunk boundaries.
-    Falls back to recursive splitting on LLM failure.
-    """
+    """Uses an LLM to determine semantic boundaries in text."""
 
     def __init__(
         self,
@@ -27,24 +23,17 @@ class AgenticSplitter(BaseTextSplitter):
         self.similarity_threshold = similarity_threshold
 
     def _split_into_sentences(self, text: str) -> List[str]:
-        """Split text into sentences using simple regex."""
         sentences = re.split(r"(?<=[.!?])\s+", text.strip())
         return [s.strip() for s in sentences if s.strip()]
 
     def _fallback_split(self, text: str) -> List[str]:
-        """Simple character-based fallback splitting."""
-        chunks = []
-        for i in range(0, len(text), self.max_chunk_size):
-            chunk = text[i : i + self.max_chunk_size]
-            chunks.append(chunk)
-        return chunks
+        return [
+            text[i : i + self.max_chunk_size]
+            for i in range(0, len(text), self.max_chunk_size)
+        ]
 
     def _get_boundaries_from_llm(self, sentences: List[str]) -> List[int]:
-        """
-        Ask the LLM to identify boundary indices where chunks should be split.
-        Returns a list of sentence indices where new chunks should start.
-        """
-        numbered_sentences = "\n".join([f"[{i}] {s}" for i, s in enumerate(sentences)])
+        numbered_sentences = "\n".join(f"[{i}] {s}" for i, s in enumerate(sentences))
 
         prompt = (
             "You are a text segmentation assistant. Given the following numbered sentences, "
@@ -104,18 +93,16 @@ class AgenticSplitter(BaseTextSplitter):
         return [c for c in chunks if c.strip()]
 
     def split_documents(self, documents: List[Document]) -> List[Document]:
-        chunks = []
-        for doc in documents:
-            text_chunks = self.split_text(doc.content)
-            for i, text in enumerate(text_chunks):
-                new_doc = Document(
-                    content=text,
-                    metadata={
-                        **doc.metadata,
-                        "chunk_index": i,
-                        "parent_id": doc.id,
-                        "chunking_strategy": "agentic",
-                    },
-                )
-                chunks.append(new_doc)
-        return chunks
+        return [
+            Document(
+                content=text,
+                metadata={
+                    **doc.metadata,
+                    "chunk_index": i,
+                    "parent_id": doc.id,
+                    "chunking_strategy": "agentic",
+                },
+            )
+            for doc in documents
+            for i, text in enumerate(self.split_text(doc.content))
+        ]

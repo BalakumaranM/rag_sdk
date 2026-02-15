@@ -4,15 +4,18 @@ from ..document import Document
 
 
 class GenerationStrategy(ABC):
-    """
-    Abstract base class for generation strategies.
-    """
+    """Base class for all generation strategies."""
 
     @abstractmethod
     def generate(self, query: str, documents: List[Document]) -> Dict[str, Any]:
-        """
-        Generate an answer given a query and retrieved documents.
+        """Generate an answer from a query and retrieved documents.
 
-        Returns a dict with at least an 'answer' key.
+        Args:
+            query: The user's question.
+            documents: Retrieved context documents.
+
+        Returns:
+            Dict with at least an 'answer' key. Strategies may include
+            additional keys (e.g., 'citations', 'verification_qa').
         """
         pass

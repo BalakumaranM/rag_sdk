@@ -35,22 +35,11 @@ class RAG:
         self._init_components()
 
     def _init_components(self) -> None:
-        # 1. Embeddings
         self._init_embeddings()
-
-        # 2. Vector Store
         self._init_vectorstore()
-
-        # 3. LLM (must come before splitter/retriever since they may need it)
         self._init_llm()
-
-        # 4. Text Splitter
         self._init_splitter()
-
-        # 5. Retriever
         self._init_retriever()
-
-        # 6. Generation Strategy
         self._init_generation()
 
     def _init_embeddings(self) -> None:
@@ -203,39 +192,31 @@ class RAG:
             raise ValueError(f"Unsupported generation strategy: {strategy}")
 
     def ingest_documents(self, documents: List[Document]) -> Dict[str, int]:
-        """
-        Ingest documents into the vector store.
-        """
-        # 1. Split
-        splitted_docs = self.text_splitter.split_documents(documents)
-        logger.info(
-            f"Split {len(documents)} documents into {len(splitted_docs)} chunks."
-        )
+        split_docs = self.text_splitter.split_documents(documents)
+        logger.info(f"Split {len(documents)} documents into {len(split_docs)} chunks.")
 
-        # 2. Embed
-        texts = [doc.content for doc in splitted_docs]
+        texts = [doc.content for doc in split_docs]
         embeddings = self.embedding_provider.embed_documents(texts)
         logger.info(f"Generated {len(embeddings)} embeddings.")
 
-        # 3. Store
-        self.vector_store.add_documents(splitted_docs, embeddings)
+        self.vector_store.add_documents(split_docs, embeddings)
         logger.info(f"Stored documents in {self.config.vectorstore.provider}.")
 
-        # 4. Post-ingestion hooks for advanced retrievers
-        if isinstance(self.retriever, CorrectiveRAGRetriever):
-            inner = self.retriever.base_retriever
-        else:
-            inner = self.retriever
+        inner = (
+            self.retriever.base_retriever
+            if isinstance(self.retriever, CorrectiveRAGRetriever)
+            else self.retriever
+        )
 
         if isinstance(inner, GraphRAGRetriever):
             logger.info("Building knowledge graph for Graph RAG...")
-            inner.build_graph(splitted_docs)
+            inner.build_graph(split_docs)
 
         if isinstance(inner, RAPTORRetriever):
             logger.info("Building RAPTOR tree...")
-            inner.build_tree(splitted_docs)
+            inner.build_tree(split_docs)
 
-        return {"source_documents": len(documents), "chunks": len(splitted_docs)}
+        return {"source_documents": len(documents), "chunks": len(split_docs)}
 
     def query(
         self,
@@ -243,21 +224,13 @@ class RAG:
         top_k: Optional[int] = None,
         filters: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """
-        Query the RAG system.
-        """
         start_time = time.time()
 
-        # 1. Retrieve
         retrieved_docs = self.retriever.retrieve(
             query, top_k=top_k or 5, filters=filters
         )
-
-        # 2. Generate
         result = self.generation_strategy.generate(query, retrieved_docs)
 
-        latency = time.time() - start_time
         result["sources"] = retrieved_docs
-        result["latency"] = latency
-
+        result["latency"] = time.time() - start_time
         return result

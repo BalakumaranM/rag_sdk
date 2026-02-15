@@ -10,13 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class ChainOfVerificationGeneration(GenerationStrategy):
-    """
-    Chain-of-Verification (CoVe) generation strategy.
-    1. Generate initial answer
-    2. Generate verification questions about claims in the answer
-    3. Independently answer each verification question
-    4. Produce refined answer incorporating verification results
-    """
+    """Generates an answer, verifies claims via follow-up questions, then refines."""
 
     def __init__(self, llm_provider: LLMProvider, max_verification_questions: int = 3):
         self.llm_provider = llm_provider

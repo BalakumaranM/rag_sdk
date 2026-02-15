@@ -11,11 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class CorrectiveRAGRetriever(BaseRetriever):
-    """
-    Corrective RAG: wraps any BaseRetriever and evaluates relevance of retrieved documents.
-    If too few documents pass the relevance threshold, refines the query and re-retrieves.
-    Composable with any retrieval strategy (dense, Graph RAG, RAPTOR).
-    """
+    """Wraps any retriever to evaluate relevance and refine queries when results are poor."""
 
     def __init__(
         self,
@@ -30,7 +26,6 @@ class CorrectiveRAGRetriever(BaseRetriever):
     def _evaluate_relevance(
         self, query: str, documents: List[Document]
     ) -> List[Document]:
-        """Evaluate relevance of each document to the query using LLM."""
         if not documents:
             return []
 
@@ -65,7 +60,6 @@ class CorrectiveRAGRetriever(BaseRetriever):
         return documents
 
     def _refine_query(self, original_query: str) -> str:
-        """Use LLM to refine the query for better retrieval."""
         prompt = (
             "The following query did not retrieve enough relevant results. "
             "Rewrite it to be more specific and likely to match relevant documents. "
