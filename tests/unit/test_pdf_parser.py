@@ -21,7 +21,7 @@ from rag_sdk.document.pdf_parser import PyMuPDFParser
 
 
 class FitzRect:
-    """Mock fitz.Rect."""
+    """Mock fitz.Rect for page.rect (has .width/.height attributes)."""
 
     def __init__(self, x0: float, y0: float, x1: float, y1: float) -> None:
         self.x0 = x0
@@ -30,14 +30,6 @@ class FitzRect:
         self.y1 = y1
         self.width = x1 - x0
         self.height = y1 - y0
-
-
-class FitzPoint:
-    """Mock fitz.Point."""
-
-    def __init__(self, x: float, y: float) -> None:
-        self.x = x
-        self.y = y
 
 
 def make_mock_page(
@@ -153,8 +145,8 @@ class TestPyMuPDFParserSegments:
         drawings = [
             {
                 "items": [
-                    ("l", FitzPoint(0, 50), FitzPoint(200, 50)),  # horizontal line
-                    ("l", FitzPoint(100, 0), FitzPoint(100, 100)),  # vertical line
+                    ("l", (0, 50), (200, 50)),  # horizontal line
+                    ("l", (100, 0), (100, 100)),  # vertical line
                 ],
             }
         ]
@@ -172,7 +164,7 @@ class TestPyMuPDFParserSegments:
         drawings = [
             {
                 "items": [
-                    ("re", FitzRect(10, 20, 110, 70)),
+                    ("re", (10, 20, 110, 70)),
                 ],
             }
         ]
@@ -191,7 +183,7 @@ class TestPyMuPDFParserCheckboxes:
         # A small square rect (12x12)
         drawings = [
             {
-                "items": [("re", FitzRect(10, 10, 22, 22))],
+                "items": [("re", (10, 10, 22, 22))],
                 "fill": None,  # no fill = unchecked
             }
         ]
@@ -221,7 +213,7 @@ class TestPyMuPDFParserCheckboxes:
 
         drawings = [
             {
-                "items": [("re", FitzRect(10, 10, 22, 22))],
+                "items": [("re", (10, 10, 22, 22))],
                 "fill": (0, 0, 0),  # black fill = checked
             }
         ]
@@ -362,3 +354,36 @@ class TestToDocuments:
         assert "Name | Age" in docs[0].content
         assert "Alice | 30" in docs[0].content
         assert '"headers"' in docs[0].metadata.get("tables", "")
+
+
+class TestCheckboxDensityFilter:
+    def test_dense_cluster_filtered(self) -> None:
+        """Many checkboxes in same Y-band should be filtered as decorative."""
+        parser = PyMuPDFParser(checkbox_max_density=5)
+
+        # 10 small rects all at y~580-590 -> dense cluster
+        drawings = [
+            {"items": [("re", (10 + i * 15, 580, 20 + i * 15, 590))], "fill": None}
+            for i in range(10)
+        ]
+        text_dict: Dict[str, Any] = {"blocks": []}
+        page = make_mock_page(text_dict, drawings)
+        result = parser.parse_page(page, page_number=0)
+
+        assert len(result.checkboxes) == 0
+
+    def test_sparse_checkboxes_kept(self) -> None:
+        """A few checkboxes spread out should NOT be filtered."""
+        parser = PyMuPDFParser(checkbox_max_density=5)
+
+        # 3 checkboxes at different Y positions
+        drawings = [
+            {"items": [("re", (10, 100, 22, 112))], "fill": None},
+            {"items": [("re", (10, 200, 22, 212))], "fill": None},
+            {"items": [("re", (10, 300, 22, 312))], "fill": None},
+        ]
+        text_dict: Dict[str, Any] = {"blocks": []}
+        page = make_mock_page(text_dict, drawings)
+        result = parser.parse_page(page, page_number=0)
+
+        assert len(result.checkboxes) == 3

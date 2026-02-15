@@ -46,6 +46,10 @@ class PyMuPDFParser(BasePDFParser):
     6. Extract table content from spans within grid cells
     7. Filter text lines that overlap table regions
     8. Build page elements in reading order
+
+    Best suited for digital (non-scanned) PDFs with embedded text.
+    For scanned PDFs or complex layouts (multi-column, borderless tables),
+    consider using the 'docling' backend instead.
     """
 
     def __init__(
@@ -59,6 +63,7 @@ class PyMuPDFParser(BasePDFParser):
         checkbox_min_size: float = 6.0,
         checkbox_max_size: float = 24.0,
         checkbox_aspect_ratio_tolerance: float = 0.3,
+        checkbox_max_density: int = 5,
         include_tables_in_text: bool = True,
     ) -> None:
         self.line_y_tolerance = line_y_tolerance
@@ -70,6 +75,7 @@ class PyMuPDFParser(BasePDFParser):
         self.checkbox_min_size = checkbox_min_size
         self.checkbox_max_size = checkbox_max_size
         self.checkbox_aspect_ratio_tolerance = checkbox_aspect_ratio_tolerance
+        self.checkbox_max_density = checkbox_max_density
         self.include_tables_in_text = include_tables_in_text
 
         self.grid_detector = TableGridDetector(
@@ -98,11 +104,12 @@ class PyMuPDFParser(BasePDFParser):
         doc = fitz.open(file_path)
         parsed_pages: List[ParsedPage] = []
 
-        page_indices = pages if pages is not None else range(doc.page_count)
+        total_pages = doc.page_count
+        page_indices = pages if pages is not None else range(total_pages)
         for page_num in page_indices:
-            if page_num < 0 or page_num >= doc.page_count:
+            if page_num < 0 or page_num >= total_pages:
                 logger.warning(
-                    f"Page {page_num} out of range (0-{doc.page_count - 1}), skipping."
+                    f"Page {page_num} out of range (0-{total_pages - 1}), skipping."
                 )
                 continue
             fitz_page = doc[page_num]
@@ -110,11 +117,27 @@ class PyMuPDFParser(BasePDFParser):
 
         doc.close()
 
+        metadata: Dict[str, Any] = {
+            "filename": path.name,
+            "extension": path.suffix,
+        }
+
+        # Detect scanned PDF: if most pages have very little text
+        scanned_pages = sum(1 for p in parsed_pages if len(p.text_lines) <= 1)
+        if parsed_pages and scanned_pages > len(parsed_pages) * 0.5:
+            logger.warning(
+                "PDF appears to be scanned (most pages have no extractable text). "
+                "Consider using the 'docling' backend for OCR support: "
+                "RAGConfig(document_processing=DocumentProcessingConfig("
+                "pdf_parser=PDFParserConfig(backend='docling')))"
+            )
+            metadata["possibly_scanned"] = True
+
         return ParsedDocument(
             source=str(path),
-            total_pages=doc.page_count,
+            total_pages=total_pages,
             pages=parsed_pages,
-            metadata={"filename": path.name, "extension": path.suffix},
+            metadata=metadata,
         )
 
     def parse_page(self, page: Any, page_number: int) -> ParsedPage:
@@ -148,7 +171,7 @@ class PyMuPDFParser(BasePDFParser):
         horizontal = merge_touching_segments(horizontal, self.segment_merge_gap)
         vertical = merge_touching_segments(vertical, self.segment_merge_gap)
 
-        # Step 6: Detect checkboxes
+        # Step 6: Detect checkboxes (with density filter)
         checkboxes = self._detect_checkboxes(page, text_lines)
 
         # Step 7: Detect table grids
@@ -221,12 +244,12 @@ class PyMuPDFParser(BasePDFParser):
             for item in drawing.get("items", []):
                 kind = item[0]
 
-                if kind == "l":  # line
+                if kind == "l":  # line: item = ("l", (x0,y0), (x1,y1))
                     p1, p2 = item[1], item[2]
-                    segments.append(LineSegment(x0=p1.x, y0=p1.y, x1=p2.x, y1=p2.y))
-                elif kind == "re":  # rectangle
+                    segments.append(LineSegment(x0=p1[0], y0=p1[1], x1=p2[0], y1=p2[1]))
+                elif kind == "re":  # rectangle: item = ("re", (x0,y0,x1,y1), ...)
                     rect = item[1]
-                    x0, y0, x1, y1 = rect.x0, rect.y0, rect.x1, rect.y1
+                    x0, y0, x1, y1 = rect[0], rect[1], rect[2], rect[3]
                     # Decompose into 4 line segments
                     segments.extend(
                         [
@@ -244,8 +267,13 @@ class PyMuPDFParser(BasePDFParser):
     def _detect_checkboxes(
         self, page: Any, text_lines: List[TextLine]
     ) -> List[Checkbox]:
-        """Detect checkboxes from small square rectangles in drawings."""
-        checkboxes: List[Checkbox] = []
+        """Detect checkboxes from small square rectangles in drawings.
+
+        Includes a density filter: if too many candidates cluster in a narrow
+        Y-band, they are likely decorative elements (figure borders, etc.)
+        rather than real checkboxes.
+        """
+        candidates: List[Checkbox] = []
 
         for drawing in page.get_cdrawings():
             for item in drawing.get("items", []):
@@ -253,8 +281,9 @@ class PyMuPDFParser(BasePDFParser):
                     continue
 
                 rect = item[1]
-                w = abs(rect.x1 - rect.x0)
-                h = abs(rect.y1 - rect.y0)
+                rx0, ry0, rx1, ry1 = rect[0], rect[1], rect[2], rect[3]
+                w = abs(rx1 - rx0)
+                h = abs(ry1 - ry0)
 
                 if w < self.checkbox_min_size or w > self.checkbox_max_size:
                     continue
@@ -265,7 +294,7 @@ class PyMuPDFParser(BasePDFParser):
                 if aspect_ratio < (1.0 - self.checkbox_aspect_ratio_tolerance):
                     continue
 
-                bbox = BBox(x0=rect.x0, y0=rect.y0, x1=rect.x1, y1=rect.y1)
+                bbox = BBox(x0=rx0, y0=ry0, x1=rx1, y1=ry1)
 
                 # Check if there's a mark inside (fill or inner drawing)
                 fill = drawing.get("fill")
@@ -275,9 +304,44 @@ class PyMuPDFParser(BasePDFParser):
                 # Find label text to the right
                 label = self._find_checkbox_label(bbox, text_lines)
 
-                checkboxes.append(Checkbox(state=state, bbox=bbox, label=label))
+                candidates.append(Checkbox(state=state, bbox=bbox, label=label))
 
-        return checkboxes
+        # Density filter: group by Y-band and discard dense clusters
+        return self._filter_checkbox_density(candidates)
+
+    def _filter_checkbox_density(
+        self, candidates: List[Checkbox], band_height: float = 50.0
+    ) -> List[Checkbox]:
+        """Remove checkbox candidates from dense Y-bands (likely decorative).
+
+        Groups candidates into Y-bands of band_height pixels. Bands with
+        more than checkbox_max_density candidates are discarded.
+
+        Args:
+            candidates: Raw checkbox candidates.
+            band_height: Height of each Y-band for grouping.
+
+        Returns:
+            Filtered list of checkboxes.
+        """
+        if not candidates:
+            return []
+
+        # Group by Y-band
+        bands: Dict[int, List[Checkbox]] = {}
+        for cb in candidates:
+            band_key = int(cb.bbox.mid_y / band_height)
+            if band_key not in bands:
+                bands[band_key] = []
+            bands[band_key].append(cb)
+
+        # Keep only bands with acceptable density
+        filtered: List[Checkbox] = []
+        for band_cbs in bands.values():
+            if len(band_cbs) <= self.checkbox_max_density:
+                filtered.extend(band_cbs)
+
+        return filtered
 
     def _find_checkbox_label(self, cb_bbox: BBox, text_lines: List[TextLine]) -> str:
         """Find the text label immediately to the right of a checkbox."""
