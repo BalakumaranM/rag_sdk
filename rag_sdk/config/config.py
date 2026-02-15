@@ -29,6 +29,22 @@ class PropositionChunkingConfig(BaseModel):
     max_propositions_per_chunk: int = 5
 
 
+class PDFParserConfig(BaseModel):
+    backend: str = "pymupdf"
+    line_y_tolerance: float = 2.0
+    word_x_gap_threshold: float = 5.0
+    min_segment_length: float = 10.0
+    grid_snap_tolerance: float = 3.0
+    min_table_rows: int = 2
+    min_table_cols: int = 2
+    segment_merge_gap: float = 2.0
+    checkbox_min_size: float = 6.0
+    checkbox_max_size: float = 24.0
+    checkbox_aspect_ratio_tolerance: float = 0.3
+    one_document_per_page: bool = True
+    include_tables_in_text: bool = True
+
+
 class DocumentProcessingConfig(BaseModel):
     chunk_size: int = 1000
     chunk_overlap: int = 200
@@ -40,6 +56,7 @@ class DocumentProcessingConfig(BaseModel):
     proposition_chunking: PropositionChunkingConfig = Field(
         default_factory=PropositionChunkingConfig
     )
+    pdf_parser: PDFParserConfig = Field(default_factory=PDFParserConfig)
 
 
 class OpenAIEmbeddingConfig(BaseModel):

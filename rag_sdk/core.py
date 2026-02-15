@@ -3,7 +3,9 @@ import logging
 from typing import List, Optional, Dict, Any
 from .config import Config
 from .document import Document, TextSplitter, AgenticSplitter, PropositionSplitter
-from .document.base import BaseTextSplitter
+from .document.base import BaseTextSplitter, BasePDFParser
+from .document.loader import DocumentLoader
+from .document.pdf_parser import PyMuPDFParser
 from .embeddings import OpenAIEmbedding, EmbeddingProvider
 from .vectorstore import VectorStoreProvider, InMemoryVectorStore, PineconeVectorStore
 from .llm import LLMProvider, OpenAILLM
@@ -41,6 +43,7 @@ class RAG:
         self._init_splitter()
         self._init_retriever()
         self._init_generation()
+        self._init_pdf_parser()
 
     def _init_embeddings(self) -> None:
         if self.config.embeddings.provider == "openai":
@@ -190,6 +193,44 @@ class RAG:
             )
         else:
             raise ValueError(f"Unsupported generation strategy: {strategy}")
+
+    def _init_pdf_parser(self) -> None:
+        pdf_config = self.config.document_processing.pdf_parser
+        if pdf_config.backend == "pymupdf":
+            self.pdf_parser: BasePDFParser = PyMuPDFParser(
+                line_y_tolerance=pdf_config.line_y_tolerance,
+                min_segment_length=pdf_config.min_segment_length,
+                grid_snap_tolerance=pdf_config.grid_snap_tolerance,
+                min_table_rows=pdf_config.min_table_rows,
+                min_table_cols=pdf_config.min_table_cols,
+                segment_merge_gap=pdf_config.segment_merge_gap,
+                checkbox_min_size=pdf_config.checkbox_min_size,
+                checkbox_max_size=pdf_config.checkbox_max_size,
+                checkbox_aspect_ratio_tolerance=pdf_config.checkbox_aspect_ratio_tolerance,
+                include_tables_in_text=pdf_config.include_tables_in_text,
+            )
+        else:
+            raise ValueError(f"Unsupported PDF parser backend: {pdf_config.backend}")
+
+    def ingest_pdf(self, file_path: str) -> Dict[str, int]:
+        """Parse a PDF file and ingest it into the RAG pipeline.
+
+        Args:
+            file_path: Path to the PDF file.
+
+        Returns:
+            Dict with source_documents and chunks counts.
+        """
+        pdf_config = self.config.document_processing.pdf_parser
+        documents = DocumentLoader.load_file(
+            file_path,
+            pdf_parser=self.pdf_parser,
+            one_doc_per_page=pdf_config.one_document_per_page,
+        )
+        if isinstance(documents, Document):
+            documents = [documents]
+        logger.info(f"Loaded {len(documents)} documents from PDF: {file_path}")
+        return self.ingest_documents(documents)
 
     def ingest_documents(self, documents: List[Document]) -> Dict[str, int]:
         split_docs = self.text_splitter.split_documents(documents)

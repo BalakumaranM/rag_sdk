@@ -1,15 +1,55 @@
 from .models import Document
 from .loader import DocumentLoader
-from .base import BaseTextSplitter
+from .base import BaseTextSplitter, BasePDFParser
 from .splitter import TextSplitter
 from .agentic_splitter import AgenticSplitter
 from .proposition_splitter import PropositionSplitter
+from .pdf_models import (
+    BBox,
+    TextSpan,
+    TextLine,
+    LineSegment,
+    GridCell,
+    Table,
+    CheckboxState,
+    Checkbox,
+    PageElement,
+    ParsedPage,
+    ParsedDocument,
+)
+from .pdf_geometry import (
+    cluster_by_y,
+    merge_touching_segments,
+    classify_segments,
+    sort_reading_order,
+)
+from .pdf_table_extractor import TableGridDetector, TableExtractor
+from .pdf_parser import PyMuPDFParser
 
 __all__ = [
     "Document",
     "DocumentLoader",
     "BaseTextSplitter",
+    "BasePDFParser",
     "TextSplitter",
     "AgenticSplitter",
     "PropositionSplitter",
+    "BBox",
+    "TextSpan",
+    "TextLine",
+    "LineSegment",
+    "GridCell",
+    "Table",
+    "CheckboxState",
+    "Checkbox",
+    "PageElement",
+    "ParsedPage",
+    "ParsedDocument",
+    "cluster_by_y",
+    "merge_touching_segments",
+    "classify_segments",
+    "sort_reading_order",
+    "TableGridDetector",
+    "TableExtractor",
+    "PyMuPDFParser",
 ]
