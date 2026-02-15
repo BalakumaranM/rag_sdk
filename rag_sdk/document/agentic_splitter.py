@@ -1,10 +1,9 @@
-import json
 import logging
 import re
 from typing import List
 from .base import BaseTextSplitter
 from .models import Document
-from ..llm import LLMProvider
+from ..llm import LLMProvider, extract_json_from_llm
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +33,7 @@ class AgenticSplitter(BaseTextSplitter):
 
     def _get_boundaries_from_llm(self, sentences: List[str]) -> List[int]:
         numbered_sentences = "\n".join(f"[{i}] {s}" for i, s in enumerate(sentences))
+        num_sentences = len(sentences)
 
         prompt = (
             "You are a text segmentation assistant. Given the following numbered sentences, "
@@ -42,25 +42,23 @@ class AgenticSplitter(BaseTextSplitter):
             f"Sentences:\n{numbered_sentences}\n\n"
             "Return ONLY a JSON array of integer indices where new sections begin. "
             "Always include 0 as the first index. Example: [0, 4, 9]\n"
+            "Do not include any explanation, markdown, or text outside the JSON array.\n"
             "Response:"
         )
 
-        try:
-            response = self.llm_provider.generate(prompt=prompt)
-            # Extract JSON array from response
-            match = re.search(r"\[[\d,\s]*\]", response)
-            if match:
-                boundaries = json.loads(match.group())
-                boundaries = sorted(
-                    set(int(b) for b in boundaries if 0 <= b < len(sentences))
-                )
-                if not boundaries or boundaries[0] != 0:
-                    boundaries = [0] + boundaries
-                return boundaries
-        except Exception as e:
-            logger.warning(f"LLM boundary detection failed: {e}")
+        def _validate(parsed: list) -> str:
+            if not all(isinstance(b, int) for b in parsed):
+                return "Expected array of integers, got non-integer elements."
+            return ""
 
-        return []
+        result = extract_json_from_llm(self.llm_provider, prompt, validate=_validate)
+        if result is None:
+            return []
+
+        boundaries = sorted(set(b for b in result if 0 <= b < num_sentences))
+        if not boundaries or boundaries[0] != 0:
+            boundaries = [0] + boundaries
+        return boundaries
 
     def split_text(self, text: str) -> List[str]:
         if len(text) <= self.max_chunk_size:
