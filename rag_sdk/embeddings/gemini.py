@@ -1,5 +1,6 @@
 from typing import List
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from .base import EmbeddingProvider
 from ..config import GeminiEmbeddingConfig
 
@@ -11,24 +12,24 @@ class GeminiEmbedding(EmbeddingProvider):
 
     def __init__(self, config: GeminiEmbeddingConfig):
         self.config = config
-        genai.configure(api_key=config.get_api_key())  # type: ignore
+        self.client = genai.Client(api_key=config.get_api_key())
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        embeddings = []
-        for text in texts:
-            # Gemini expects 'content' and task_type
-            result = genai.embed_content(  # type: ignore
-                model=self.config.model,
-                content=text,
-                task_type="retrieval_document",
-            )
-            embeddings.append(result["embedding"])
-        return embeddings
+        response = self.client.models.embed_content(
+            model=self.config.model,
+            contents=texts,  # type: ignore[arg-type]
+            config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT"),
+        )
+        if not response.embeddings:
+            return []
+        return [emb.values or [] for emb in response.embeddings]
 
     def embed_query(self, text: str) -> List[float]:
-        result = genai.embed_content(  # type: ignore
+        response = self.client.models.embed_content(
             model=self.config.model,
-            content=text,
-            task_type="retrieval_query",
+            contents=text,
+            config=types.EmbedContentConfig(task_type="RETRIEVAL_QUERY"),
         )
-        return result["embedding"]
+        if not response.embeddings:
+            return []
+        return response.embeddings[0].values or []

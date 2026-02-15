@@ -67,7 +67,7 @@ class CohereEmbeddingConfig(BaseModel):
 
 class GeminiEmbeddingConfig(BaseModel):
     api_key: Optional[SecretStr] = Field(default=None, validate_default=True)
-    model: str = "models/text-embedding-004"
+    model: str = "gemini-embedding-001"
 
     def get_api_key(self) -> str:
         if self.api_key:
@@ -133,7 +133,7 @@ class OpenAIConfig(BaseModel):
 
 class GeminiConfig(BaseModel):
     api_key: Optional[SecretStr] = Field(default=None, validate_default=True)
-    model: str = "gemini-1.5-pro"
+    model: str = "gemini-2.5-flash"
     temperature: float = 0.7
     max_output_tokens: int = 1000
 
