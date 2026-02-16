@@ -26,6 +26,7 @@ dev = [
     "types-PyYAML",
     "types-requests",
 ]
+docling = ["docling>=2.0.0"]
 
 [tool.setuptools.packages.find]
 include = ["rag_sdk*"]

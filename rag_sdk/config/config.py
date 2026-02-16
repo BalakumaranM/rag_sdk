@@ -30,7 +30,8 @@ class PropositionChunkingConfig(BaseModel):
 
 
 class PDFParserConfig(BaseModel):
-    backend: str = "pymupdf"
+    backend: str = "pymupdf"  # "pymupdf" or "docling"
+    # PyMuPDF-specific fields:
     line_y_tolerance: float = 2.0
     word_x_gap_threshold: float = 5.0
     min_segment_length: float = 10.0
@@ -43,6 +44,11 @@ class PDFParserConfig(BaseModel):
     checkbox_aspect_ratio_tolerance: float = 0.3
     one_document_per_page: bool = True
     include_tables_in_text: bool = True
+    # Docling-specific fields:
+    docling_do_ocr: bool = True
+    docling_do_table_structure: bool = True
+    docling_table_mode: str = "accurate"  # "accurate" or "fast"
+    docling_timeout: Optional[float] = None
 
 
 class DocumentProcessingConfig(BaseModel):

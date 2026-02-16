@@ -53,3 +53,10 @@ __all__ = [
     "TableExtractor",
     "PyMuPDFParser",
 ]
+
+try:
+    from .docling_parser import DoclingParser  # noqa: F401
+
+    __all__.append("DoclingParser")
+except ImportError:
+    pass

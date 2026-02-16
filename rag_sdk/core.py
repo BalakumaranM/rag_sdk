@@ -209,6 +209,15 @@ class RAG:
                 checkbox_aspect_ratio_tolerance=pdf_config.checkbox_aspect_ratio_tolerance,
                 include_tables_in_text=pdf_config.include_tables_in_text,
             )
+        elif pdf_config.backend == "docling":
+            from .document.docling_parser import DoclingParser
+
+            self.pdf_parser = DoclingParser(
+                do_ocr=pdf_config.docling_do_ocr,
+                do_table_structure=pdf_config.docling_do_table_structure,
+                table_mode=pdf_config.docling_table_mode,
+                timeout=pdf_config.docling_timeout,
+            )
         else:
             raise ValueError(f"Unsupported PDF parser backend: {pdf_config.backend}")
 
