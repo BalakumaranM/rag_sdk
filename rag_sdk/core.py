@@ -7,7 +7,7 @@ from .document.base import BaseTextSplitter, BasePDFParser
 from .document.loader import DocumentLoader
 from .document.pdf_parser import PyMuPDFParser
 from .embeddings import OpenAIEmbedding, EmbeddingProvider
-from .vectorstore import VectorStoreProvider, InMemoryVectorStore, PineconeVectorStore
+from .vectorstore import VectorStoreProvider, InMemoryVectorStore
 from .llm import LLMProvider, OpenAILLM
 from .retrieval import (
     Retriever,
@@ -76,16 +76,41 @@ class RAG:
             )
 
     def _init_vectorstore(self) -> None:
-        if self.config.vectorstore.provider == "memory":
+        provider = self.config.vectorstore.provider
+        if provider == "memory":
             self.vector_store: VectorStoreProvider = InMemoryVectorStore()
-        elif self.config.vectorstore.provider == "pinecone":
+        elif provider == "faiss":
+            if not self.config.vectorstore.faiss:
+                raise ValueError("FAISS vector store config is missing")
+            from .vectorstore.faiss_store import FAISSVectorStore
+
+            self.vector_store = FAISSVectorStore(self.config.vectorstore.faiss)
+        elif provider == "chroma":
+            if not self.config.vectorstore.chroma:
+                raise ValueError("Chroma vector store config is missing")
+            from .vectorstore.chroma_store import ChromaVectorStore
+
+            self.vector_store = ChromaVectorStore(self.config.vectorstore.chroma)
+        elif provider == "pinecone":
             if not self.config.vectorstore.pinecone:
                 raise ValueError("Pinecone vector store config is missing")
+            from .vectorstore.pinecone import PineconeVectorStore
+
             self.vector_store = PineconeVectorStore(self.config.vectorstore.pinecone)
+        elif provider == "weaviate":
+            if not self.config.vectorstore.weaviate:
+                raise ValueError("Weaviate vector store config is missing")
+            from .vectorstore.weaviate_store import WeaviateVectorStore
+
+            self.vector_store = WeaviateVectorStore(self.config.vectorstore.weaviate)
+        elif provider == "qdrant":
+            if not self.config.vectorstore.qdrant:
+                raise ValueError("Qdrant vector store config is missing")
+            from .vectorstore.qdrant_store import QdrantVectorStore
+
+            self.vector_store = QdrantVectorStore(self.config.vectorstore.qdrant)
         else:
-            raise ValueError(
-                f"Unsupported vector store provider: {self.config.vectorstore.provider}"
-            )
+            raise ValueError(f"Unsupported vector store provider: {provider}")
 
     def _init_llm(self) -> None:
         if self.config.llm.provider == "openai":

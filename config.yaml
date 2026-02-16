@@ -27,9 +27,27 @@ embeddings:
   #   model: "voyage-large-2"
 
 vectorstore:
-  provider: "memory"
+  provider: "memory"  # Options: memory, faiss, chroma, pinecone, weaviate, qdrant
+  # faiss:
+  #   index_type: "Flat"       # "Flat" | "IVFFlat" | "HNSW"
+  #   metric: "cosine"         # "cosine" | "l2" | "ip"
+  #   persist_path: null       # save/load index to disk
+  # chroma:
+  #   mode: "ephemeral"        # "ephemeral" | "persistent" | "http"
+  #   persist_path: "./chroma_db"
+  #   collection_name: "rag-collection"
+  #   distance_function: "cosine"
   # pinecone:
-  #   index_name: "my-index"
+  #   index_name: "rag-index"
+  #   index_host: ""           # auto-resolved from index_name if empty
+  #   namespace: "default"
+  # weaviate:
+  #   url: "http://localhost:8080"
+  #   class_name: "Document"
+  # qdrant:
+  #   url: "http://localhost:6333"
+  #   collection_name: "rag-collection"
+  #   on_disk: false
 
 llm:
   provider: "openai" # Options: openai, gemini, anthropic, cohere

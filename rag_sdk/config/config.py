@@ -124,11 +124,27 @@ class EmbeddingConfig(BaseModel):
     )
 
 
+class FAISSConfig(BaseModel):
+    index_type: str = "Flat"  # "Flat" | "IVFFlat" | "HNSW"
+    metric: str = "cosine"  # "cosine" | "l2" | "ip"
+    persist_path: Optional[str] = None
+
+
+class ChromaConfig(BaseModel):
+    mode: str = "ephemeral"  # "ephemeral" | "persistent" | "http"
+    persist_path: str = "./chroma_db"
+    host: str = "localhost"
+    port: int = 8000
+    collection_name: str = "rag-collection"
+    distance_function: str = "cosine"  # "cosine" | "l2" | "ip"
+
+
 class PineconeConfig(BaseModel):
     api_key: Optional[SecretStr] = Field(default=None, validate_default=True)
-    environment: str = "us-east-1-aws"
+    index_host: str = ""
     index_name: str = "rag-index"
     namespace: str = "default"
+    environment: str = "us-east-1-aws"
 
     def get_api_key(self) -> str:
         if self.api_key:
@@ -136,9 +152,38 @@ class PineconeConfig(BaseModel):
         return os.getenv("PINECONE_API_KEY", "")
 
 
+class WeaviateConfig(BaseModel):
+    url: str = "http://localhost:8080"
+    api_key: Optional[SecretStr] = Field(default=None, validate_default=True)
+    class_name: str = "Document"
+
+    def get_api_key(self) -> str:
+        if self.api_key:
+            return self.api_key.get_secret_value()
+        return os.getenv("WEAVIATE_API_KEY", "")
+
+
+class QdrantConfig(BaseModel):
+    url: str = "http://localhost:6333"
+    api_key: Optional[SecretStr] = Field(default=None, validate_default=True)
+    collection_name: str = "rag-collection"
+    on_disk: bool = False
+
+    def get_api_key(self) -> str:
+        if self.api_key:
+            return self.api_key.get_secret_value()
+        return os.getenv("QDRANT_API_KEY", "")
+
+
 class VectorStoreConfig(BaseModel):
-    provider: str = "memory"  # Default to memory for ease of use
+    provider: str = (
+        "memory"  # "memory" | "faiss" | "chroma" | "pinecone" | "weaviate" | "qdrant"
+    )
+    faiss: Optional[FAISSConfig] = Field(default_factory=FAISSConfig)
+    chroma: Optional[ChromaConfig] = Field(default_factory=ChromaConfig)
     pinecone: Optional[PineconeConfig] = Field(default_factory=PineconeConfig)
+    weaviate: Optional[WeaviateConfig] = Field(default_factory=WeaviateConfig)
+    qdrant: Optional[QdrantConfig] = Field(default_factory=QdrantConfig)
 
 
 class OpenAIConfig(BaseModel):
