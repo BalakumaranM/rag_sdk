@@ -33,8 +33,19 @@ wheels/
 *.swp
 *.swo
 
-# Project specific
+# Claude Code / internal tooling
 .agent/
 .claude/
 git-hooks/
-mypy_errors.txt
+CLAUDE.md
+implementation_plans/
+
+# Test artifacts
+mypy_errors*.txt
+e2e_test.py
+e2e_query.py
+chroma_rag_test/
+research_papers/
+page6_*.md
+page6_*.json
+project_plans/
