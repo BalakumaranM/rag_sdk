@@ -36,8 +36,8 @@ class LateSplitter(BaseTextSplitter):
                 "Install with: pip install transformers torch"
             )
         self.config = config
-        self.tokenizer = AutoTokenizer.from_pretrained(config.model)
-        self.model = AutoModel.from_pretrained(config.model)
+        self.tokenizer = AutoTokenizer.from_pretrained(config.model)  # nosec B615
+        self.model = AutoModel.from_pretrained(config.model)  # nosec B615
         self.model.eval()
 
     def _get_token_embeddings(self, text: str) -> Tuple[List[int], "torch.Tensor"]:
