@@ -2,7 +2,14 @@ import time
 import logging
 from typing import List, Optional, Dict, Any
 from .config import Config
-from .document import Document, TextSplitter, AgenticSplitter, PropositionSplitter
+from .document import (
+    Document,
+    TextSplitter,
+    AgenticSplitter,
+    PropositionSplitter,
+    SemanticSplitter,
+    LateSplitter,
+)
 from .document.base import BaseTextSplitter, BasePDFParser
 from .document.loader import DocumentLoader
 from .document.pdf_parser import PyMuPDFParser
@@ -16,6 +23,7 @@ from .retrieval import (
     CorrectiveRAGRetriever,
 )
 from .retrieval.base import BaseRetriever
+from .reranking.base import BaseReranker
 from .generation import (
     GenerationStrategy,
     StandardGeneration,
@@ -42,6 +50,7 @@ class RAG:
         self._init_llm()
         self._init_splitter()
         self._init_retriever()
+        self._init_reranker()
         self._init_generation()
         self._init_pdf_parser()
 
@@ -70,6 +79,12 @@ class RAG:
             from .embeddings import VoyageEmbedding
 
             self.embedding_provider = VoyageEmbedding(self.config.embeddings.voyage)
+        elif self.config.embeddings.provider == "local":
+            if not self.config.embeddings.local:
+                raise ValueError("Local embedding config is missing")
+            from .embeddings import LocalEmbedding
+
+            self.embedding_provider = LocalEmbedding(self.config.embeddings.local)
         else:
             raise ValueError(
                 f"Unsupported embedding provider: {self.config.embeddings.provider}"
@@ -160,6 +175,15 @@ class RAG:
                 llm_provider=self.llm_provider,
                 max_propositions_per_chunk=prop_config.max_propositions_per_chunk,
             )
+        elif strategy == "semantic":
+            self.text_splitter = SemanticSplitter(
+                embedding_provider=self.embedding_provider,
+                config=self.config.document_processing.semantic_chunking,
+            )
+        elif strategy == "late":
+            self.text_splitter = LateSplitter(
+                config=self.config.document_processing.late_chunking,
+            )
         else:
             raise ValueError(f"Unsupported chunking strategy: {strategy}")
 
@@ -186,18 +210,81 @@ class RAG:
                 llm_provider=self.llm_provider,
                 config=self.config.retrieval,
             )
+        elif strategy == "multi_query":
+            from .retrieval import MultiQueryRetriever
+
+            dense_retriever = Retriever(
+                embedding_provider=self.embedding_provider,
+                vector_store=self.vector_store,
+                config=self.config.retrieval,
+            )
+            base_retriever = MultiQueryRetriever(
+                base_retriever=dense_retriever,
+                llm_provider=self.llm_provider,
+                config=self.config.retrieval.multi_query,
+            )
+        elif strategy == "hybrid":
+            from .retrieval import HybridRetriever
+
+            base_retriever = HybridRetriever(
+                embedding_provider=self.embedding_provider,
+                vector_store=self.vector_store,
+                config=self.config.retrieval,
+            )
+        elif strategy == "self_rag":
+            from .retrieval import SelfRAGRetriever
+
+            dense_retriever = Retriever(
+                embedding_provider=self.embedding_provider,
+                vector_store=self.vector_store,
+                config=self.config.retrieval,
+            )
+            base_retriever = SelfRAGRetriever(
+                base_retriever=dense_retriever,
+                llm_provider=self.llm_provider,
+                config=self.config.retrieval.self_rag,
+            )
         else:
             raise ValueError(f"Unsupported retrieval strategy: {strategy}")
 
         # Optionally wrap with Corrective RAG
         if self.config.retrieval.corrective_rag_enabled:
-            self.retriever: BaseRetriever = CorrectiveRAGRetriever(
+            base_retriever = CorrectiveRAGRetriever(
                 base_retriever=base_retriever,
                 llm_provider=self.llm_provider,
                 config=self.config.retrieval.corrective_rag,
             )
+
+        # Optionally wrap with Contextual Compression
+        if self.config.retrieval.contextual_compression_enabled:
+            from .retrieval import ContextualCompressionRetriever
+
+            base_retriever = ContextualCompressionRetriever(
+                base_retriever=base_retriever,
+                llm_provider=self.llm_provider,
+                config=self.config.retrieval.contextual_compression,
+            )
+
+        self.retriever: BaseRetriever = base_retriever
+
+    def _init_reranker(self) -> None:
+        reranking_config = self.config.retrieval.reranking
+        if not reranking_config.enabled:
+            self.reranker: Optional[BaseReranker] = None
+            return
+
+        if reranking_config.provider == "cohere":
+            from .reranking import CohereReranker
+
+            self.reranker = CohereReranker(reranking_config.cohere)
+        elif reranking_config.provider == "cross-encoder":
+            from .reranking import CrossEncoderReranker
+
+            self.reranker = CrossEncoderReranker(reranking_config.cross_encoder)
         else:
-            self.retriever = base_retriever
+            raise ValueError(
+                f"Unsupported reranking provider: {reranking_config.provider}"
+            )
 
     def _init_generation(self) -> None:
         strategy = self.config.generation.strategy
@@ -277,11 +364,8 @@ class RAG:
         self.vector_store.add_documents(split_docs, embeddings)
         logger.info(f"Stored documents in {self.config.vectorstore.provider}.")
 
-        inner = (
-            self.retriever.base_retriever
-            if isinstance(self.retriever, CorrectiveRAGRetriever)
-            else self.retriever
-        )
+        # Build specialized indexes for retriever wrappers
+        inner = self._unwrap_retriever(self.retriever)
 
         if isinstance(inner, GraphRAGRetriever):
             logger.info("Building knowledge graph for Graph RAG...")
@@ -291,7 +375,21 @@ class RAG:
             logger.info("Building RAPTOR tree...")
             inner.build_tree(split_docs)
 
+        from .retrieval import HybridRetriever
+
+        if isinstance(inner, HybridRetriever):
+            logger.info("Building BM25 index for hybrid retrieval...")
+            inner.index_documents(split_docs)
+
         return {"source_documents": len(documents), "chunks": len(split_docs)}
+
+    @staticmethod
+    def _unwrap_retriever(retriever: BaseRetriever) -> BaseRetriever:
+        """Unwrap chained retrievers to find the innermost base retriever."""
+        inner = retriever
+        while hasattr(inner, "base_retriever"):
+            inner = inner.base_retriever  # type: ignore[attr-defined]
+        return inner
 
     def query(
         self,
@@ -301,9 +399,16 @@ class RAG:
     ) -> Dict[str, Any]:
         start_time = time.time()
 
-        retrieved_docs = self.retriever.retrieve(
-            query, top_k=top_k or 5, filters=filters
-        )
+        k = top_k or 5
+        # Over-fetch when reranking to give the reranker more candidates
+        fetch_k = k * 3 if self.reranker else k
+        retrieved_docs = self.retriever.retrieve(query, top_k=fetch_k, filters=filters)
+
+        # Apply reranking if configured
+        if self.reranker and retrieved_docs:
+            reranked = self.reranker.rerank(query, retrieved_docs, top_k=k)
+            retrieved_docs = [doc for doc, _score in reranked]
+
         result = self.generation_strategy.generate(query, retrieved_docs)
 
         result["sources"] = retrieved_docs

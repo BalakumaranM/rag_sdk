@@ -17,7 +17,9 @@ class LoggingConfig(BaseModel):
 
 
 class ChunkingConfig(BaseModel):
-    strategy: str = "recursive"  # "recursive", "agentic", "proposition"
+    strategy: str = (
+        "recursive"  # "recursive", "agentic", "proposition", "semantic", "late"
+    )
 
 
 class AgenticChunkingConfig(BaseModel):
@@ -27,6 +29,17 @@ class AgenticChunkingConfig(BaseModel):
 
 class PropositionChunkingConfig(BaseModel):
     max_propositions_per_chunk: int = 5
+
+
+class SemanticChunkingConfig(BaseModel):
+    breakpoint_percentile: float = 25.0
+    min_chunk_size: int = 100
+
+
+class LateChunkingConfig(BaseModel):
+    model: str = "jinaai/jina-embeddings-v2-base-en"
+    chunk_size: int = 512
+    max_tokens: int = 8192
 
 
 class PDFParserConfig(BaseModel):
@@ -62,6 +75,10 @@ class DocumentProcessingConfig(BaseModel):
     proposition_chunking: PropositionChunkingConfig = Field(
         default_factory=PropositionChunkingConfig
     )
+    semantic_chunking: SemanticChunkingConfig = Field(
+        default_factory=SemanticChunkingConfig
+    )
+    late_chunking: LateChunkingConfig = Field(default_factory=LateChunkingConfig)
     pdf_parser: PDFParserConfig = Field(default_factory=PDFParserConfig)
 
 
@@ -108,8 +125,15 @@ class VoyageEmbeddingConfig(BaseModel):
         return os.getenv("VOYAGE_API_KEY", "")
 
 
+class LocalEmbeddingConfig(BaseModel):
+    model: str = "BAAI/bge-small-en-v1.5"
+    query_prefix: str = ""
+    document_prefix: str = ""
+    batch_size: int = 32
+
+
 class EmbeddingConfig(BaseModel):
-    provider: str = "openai"
+    provider: str = "openai"  # "openai", "cohere", "gemini", "voyage", "local"
     openai: Optional[OpenAIEmbeddingConfig] = Field(
         default_factory=OpenAIEmbeddingConfig
     )
@@ -122,6 +146,7 @@ class EmbeddingConfig(BaseModel):
     voyage: Optional[VoyageEmbeddingConfig] = Field(
         default_factory=VoyageEmbeddingConfig
     )
+    local: Optional[LocalEmbeddingConfig] = Field(default_factory=LocalEmbeddingConfig)
 
 
 class FAISSConfig(BaseModel):
@@ -259,10 +284,64 @@ class CorrectiveRAGConfig(BaseModel):
     max_refinement_attempts: int = 2
 
 
+class CohereRerankConfig(BaseModel):
+    api_key: Optional[SecretStr] = Field(default=None, validate_default=True)
+    model: str = "rerank-v3.5"
+    top_n: int = 5
+
+    def get_api_key(self) -> str:
+        if self.api_key:
+            return self.api_key.get_secret_value()
+        return os.getenv("COHERE_API_KEY", "")
+
+
+class CrossEncoderRerankConfig(BaseModel):
+    model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    batch_size: int = 32
+
+
+class RerankingConfig(BaseModel):
+    enabled: bool = False
+    provider: str = "cohere"  # "cohere", "cross-encoder"
+    cohere: CohereRerankConfig = Field(default_factory=CohereRerankConfig)
+    cross_encoder: CrossEncoderRerankConfig = Field(
+        default_factory=CrossEncoderRerankConfig
+    )
+
+
+class MultiQueryConfig(BaseModel):
+    num_queries: int = 3
+
+
+class HybridRetrievalConfig(BaseModel):
+    bm25_weight: float = 0.5
+    rrf_k: int = 60
+    bm25_k1: float = 1.5
+    bm25_b: float = 0.75
+
+
+class SelfRAGConfig(BaseModel):
+    check_support: bool = True
+
+
+class ContextualCompressionConfig(BaseModel):
+    enabled: bool = False
+
+
 class RetrievalConfig(BaseModel):
-    strategy: str = "dense"  # "dense", "graph_rag", "raptor"
+    strategy: str = (
+        "dense"  # "dense", "graph_rag", "raptor", "multi_query", "hybrid", "self_rag"
+    )
     top_k: int = 5
     corrective_rag_enabled: bool = False
+    contextual_compression_enabled: bool = False
+    reranking: RerankingConfig = Field(default_factory=RerankingConfig)
+    multi_query: MultiQueryConfig = Field(default_factory=MultiQueryConfig)
+    hybrid: HybridRetrievalConfig = Field(default_factory=HybridRetrievalConfig)
+    self_rag: SelfRAGConfig = Field(default_factory=SelfRAGConfig)
+    contextual_compression: ContextualCompressionConfig = Field(
+        default_factory=ContextualCompressionConfig
+    )
     graph_rag: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
     raptor: RAPTORConfig = Field(default_factory=RAPTORConfig)
     corrective_rag: CorrectiveRAGConfig = Field(default_factory=CorrectiveRAGConfig)

@@ -4,6 +4,8 @@ from .base import BaseTextSplitter, BasePDFParser
 from .splitter import TextSplitter
 from .agentic_splitter import AgenticSplitter
 from .proposition_splitter import PropositionSplitter
+from .semantic_splitter import SemanticSplitter
+from .late_splitter import LateSplitter
 from .pdf_models import (
     BBox,
     TextSpan,
@@ -34,6 +36,8 @@ __all__ = [
     "TextSplitter",
     "AgenticSplitter",
     "PropositionSplitter",
+    "SemanticSplitter",
+    "LateSplitter",
     "BBox",
     "TextSpan",
     "TextLine",
