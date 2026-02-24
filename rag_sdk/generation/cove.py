@@ -1,10 +1,11 @@
 import json
 import logging
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from .base import GenerationStrategy
 from ..document import Document
 from ..llm import LLMProvider
+from ..settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -12,9 +13,24 @@ logger = logging.getLogger(__name__)
 class ChainOfVerificationGeneration(GenerationStrategy):
     """Generates an answer, verifies claims via follow-up questions, then refines."""
 
-    def __init__(self, llm_provider: LLMProvider, max_verification_questions: int = 3):
-        self.llm_provider = llm_provider
+    def __init__(
+        self,
+        llm_provider: Optional[LLMProvider] = None,
+        max_verification_questions: int = 3,
+    ):
+        self._llm_provider = llm_provider
         self.max_verification_questions = max_verification_questions
+
+    @property
+    def llm_provider(self) -> LLMProvider:
+        """Resolve lazily: explicit init arg, else module-level Settings."""
+        provider = self._llm_provider or Settings.llm_provider
+        if provider is None:
+            raise RuntimeError(
+                "No LLM provider available. Pass one to ChainOfVerificationGeneration() "
+                "or set Settings.llm_provider."
+            )
+        return provider
 
     def _generate_initial_answer(self, query: str, context: str) -> str:
         system_prompt = (

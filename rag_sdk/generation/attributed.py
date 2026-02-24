@@ -1,9 +1,10 @@
 import logging
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from .base import GenerationStrategy
 from ..document import Document
 from ..llm import LLMProvider
+from ..settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -11,9 +12,24 @@ logger = logging.getLogger(__name__)
 class AttributedGeneration(GenerationStrategy):
     """Generates answers with inline [N] citations referencing source documents."""
 
-    def __init__(self, llm_provider: LLMProvider, citation_style: str = "numeric"):
-        self.llm_provider = llm_provider
+    def __init__(
+        self,
+        llm_provider: Optional[LLMProvider] = None,
+        citation_style: str = "numeric",
+    ):
+        self._llm_provider = llm_provider
         self.citation_style = citation_style
+
+    @property
+    def llm_provider(self) -> LLMProvider:
+        """Resolve lazily: explicit init arg, else module-level Settings."""
+        provider = self._llm_provider or Settings.llm_provider
+        if provider is None:
+            raise RuntimeError(
+                "No LLM provider available. Pass one to AttributedGeneration() "
+                "or set Settings.llm_provider."
+            )
+        return provider
 
     def _build_numbered_context(self, documents: List[Document]) -> str:
         return "\n\n".join(

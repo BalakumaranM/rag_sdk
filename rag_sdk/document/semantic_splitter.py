@@ -1,11 +1,12 @@
 import re
 import logging
-from typing import List
+from typing import List, Optional
 import numpy as np
 from .base import BaseTextSplitter
 from .models import Document
 from ..embeddings.base import EmbeddingProvider
 from ..config import SemanticChunkingConfig
+from ..settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +25,22 @@ class SemanticSplitter(BaseTextSplitter):
 
     def __init__(
         self,
-        embedding_provider: EmbeddingProvider,
-        config: SemanticChunkingConfig,
+        embedding_provider: Optional[EmbeddingProvider] = None,
+        config: Optional[SemanticChunkingConfig] = None,
     ):
-        self.embedding_provider = embedding_provider
+        self._embedding_provider = embedding_provider
         self.config = config
+
+    @property
+    def embedding_provider(self) -> EmbeddingProvider:
+        """Resolve lazily: explicit init arg, else module-level Settings."""
+        provider = self._embedding_provider or Settings.embedding_provider
+        if provider is None:
+            raise RuntimeError(
+                "No embedding provider available. Pass one to SemanticSplitter() "
+                "or set Settings.embedding_provider."
+            )
+        return provider
 
     @staticmethod
     def _split_sentences(text: str) -> List[str]:
@@ -63,6 +75,7 @@ class SemanticSplitter(BaseTextSplitter):
         if not similarities:
             return []
 
+        assert self.config is not None, "config is required"
         threshold = float(
             np.percentile(similarities, self.config.breakpoint_percentile)
         )
@@ -114,6 +127,7 @@ class SemanticSplitter(BaseTextSplitter):
             chunks.append(" ".join(sentences[start:]))
 
         # Merge small chunks if below minimum size
+        assert self.config is not None, "config is required"
         merged: List[str] = []
         for chunk in chunks:
             if merged and len(merged[-1]) + len(chunk) < self.config.min_chunk_size:

@@ -4,6 +4,7 @@ from .base import BaseRetriever
 from ..document import Document
 from ..llm import LLMProvider
 from ..config import ContextualCompressionConfig
+from ..settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +24,22 @@ class ContextualCompressionRetriever(BaseRetriever):
     def __init__(
         self,
         base_retriever: BaseRetriever,
-        llm_provider: LLMProvider,
-        config: ContextualCompressionConfig,
+        llm_provider: Optional[LLMProvider] = None,
+        config: Optional[ContextualCompressionConfig] = None,
     ):
         self.base_retriever = base_retriever
-        self.llm_provider = llm_provider
+        self._llm_provider = llm_provider
         self.config = config
+
+    @property
+    def llm_provider(self) -> LLMProvider:
+        provider = self._llm_provider or Settings.llm_provider
+        if provider is None:
+            raise RuntimeError(
+                "No LLM provider available. Pass one to ContextualCompressionRetriever() "
+                "or set Settings.llm_provider."
+            )
+        return provider
 
     def _compress_document(self, query: str, document: Document) -> Optional[Document]:
         """Extract query-relevant content from a single document.

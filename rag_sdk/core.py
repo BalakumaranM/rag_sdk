@@ -31,6 +31,7 @@ from .generation import (
     ChainOfVerificationGeneration,
     AttributedGeneration,
 )
+from .settings import Settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -39,11 +40,121 @@ logger = logging.getLogger(__name__)
 class RAG:
     """
     Main RAG orchestrator.
+
+    Provider resolution priority (highest → lowest):
+
+      1. Explicit kwarg:  ``RAG(config, embedding_provider=X)``
+      2. Module-level:    ``Settings.embedding_provider = X`` before construction
+      3. Config-driven:   ``config.embeddings.provider = "openai"`` etc.
+
+    For swapping providers **after** construction use the property setters::
+
+        rag.embedding_provider = MyNewEmbedding()   # cascades to retriever & splitter
+        rag.llm_provider       = MyNewLLM()         # cascades to retriever & generation
+
+    Note: cascading re-initialises stateless components.  Stateful retrievers
+    (GraphRAG, RAPTOR) lose their built index; re-ingest after swapping.
     """
 
-    def __init__(self, config: Config):
+    def __init__(
+        self,
+        config: Config,
+        *,
+        embedding_provider: Optional[EmbeddingProvider] = None,
+        llm_provider: Optional[LLMProvider] = None,
+    ) -> None:
         self.config = config
+        # Stash explicit overrides so _init_* methods can inspect them.
+        self._override_embedding: Optional[EmbeddingProvider] = embedding_provider
+        self._override_llm: Optional[LLMProvider] = llm_provider
+        # Fingerprint of the embedding model used during last ingest (None = not yet ingested).
+        self._ingested_embedding_fp: Optional[str] = None
         self._init_components()
+
+    # ------------------------------------------------------------------
+    # Alternative constructor
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_providers(
+        cls,
+        config: Config,
+        *,
+        embedding_provider: EmbeddingProvider,
+        llm_provider: LLMProvider,
+    ) -> "RAG":
+        """Construct a RAG instance from live provider objects.
+
+        This is the cleanest way to use custom or locally-hosted providers::
+
+            rag = RAG.from_providers(
+                config,
+                embedding_provider=MyCustomEmbedding("http://localhost:8080"),
+                llm_provider=MyLocalLLM("http://localhost:11434"),
+            )
+
+        The providers are used as-is; no config-driven initialisation runs for
+        them.  All other settings (vector store, retrieval strategy, etc.) still
+        come from *config*.
+        """
+        return cls(
+            config,
+            embedding_provider=embedding_provider,
+            llm_provider=llm_provider,
+        )
+
+    # ------------------------------------------------------------------
+    # Properties with cascading setters
+    # ------------------------------------------------------------------
+
+    @property
+    def embedding_provider(self) -> EmbeddingProvider:
+        return self._embedding_provider
+
+    @embedding_provider.setter
+    def embedding_provider(self, value: EmbeddingProvider) -> None:
+        """Swap the embedding provider and cascade to dependent components.
+
+        Components rebuilt: text_splitter (if semantic), retriever.
+
+        If documents have already been ingested, a warning is emitted because
+        the vector store still contains embeddings from the previous model.
+        Queries will return incorrect results until you call ``clear_index()``
+        and re-ingest your documents with the new provider.
+        """
+        new_fp = self._make_embedding_id(value)
+        if self._ingested_embedding_fp and self._ingested_embedding_fp != new_fp:
+            logger.warning(
+                "Embedding provider changed from '%s' to '%s' after documents were "
+                "ingested. The vector store still contains embeddings from the old "
+                "model — queries will return wrong results. Call clear_index() then "
+                "re-ingest your documents to fix this.",
+                self._ingested_embedding_fp,
+                new_fp,
+            )
+        self._embedding_provider = value
+        self._init_splitter()
+        self._init_retriever()
+
+    @property
+    def llm_provider(self) -> LLMProvider:
+        return self._llm_provider
+
+    @llm_provider.setter
+    def llm_provider(self, value: LLMProvider) -> None:
+        """Swap the LLM provider and cascade to dependent components.
+
+        Components rebuilt: text_splitter (if agentic/proposition),
+        retriever, generation_strategy.
+        """
+        self._llm_provider = value
+        self._init_splitter()
+        self._init_retriever()
+        self._init_generation()
+
+    # ------------------------------------------------------------------
+    # Initialisation
+    # ------------------------------------------------------------------
 
     def _init_components(self) -> None:
         self._init_embeddings()
@@ -56,36 +167,45 @@ class RAG:
         self._init_pdf_parser()
 
     def _init_embeddings(self) -> None:
+        # Priority 1: explicit constructor kwarg
+        if self._override_embedding is not None:
+            self._embedding_provider = self._override_embedding
+            return
+
+        # Priority 2: module-level Settings override
+        if Settings.embedding_provider is not None:
+            self._embedding_provider = Settings.embedding_provider
+            return
+
+        # Priority 3: config-driven initialisation
         if self.config.embeddings.provider == "openai":
             if not self.config.embeddings.openai:
                 raise ValueError("OpenAI embedding config is missing")
-            self.embedding_provider: EmbeddingProvider = OpenAIEmbedding(
-                self.config.embeddings.openai
-            )
+            self._embedding_provider = OpenAIEmbedding(self.config.embeddings.openai)
         elif self.config.embeddings.provider == "cohere":
             if not self.config.embeddings.cohere:
                 raise ValueError("Cohere embedding config is missing")
             from .embeddings import CohereEmbedding
 
-            self.embedding_provider = CohereEmbedding(self.config.embeddings.cohere)
+            self._embedding_provider = CohereEmbedding(self.config.embeddings.cohere)
         elif self.config.embeddings.provider == "gemini":
             if not self.config.embeddings.gemini:
                 raise ValueError("Gemini embedding config is missing")
             from .embeddings import GeminiEmbedding
 
-            self.embedding_provider = GeminiEmbedding(self.config.embeddings.gemini)
+            self._embedding_provider = GeminiEmbedding(self.config.embeddings.gemini)
         elif self.config.embeddings.provider == "voyage":
             if not self.config.embeddings.voyage:
                 raise ValueError("Voyage embedding config is missing")
             from .embeddings import VoyageEmbedding
 
-            self.embedding_provider = VoyageEmbedding(self.config.embeddings.voyage)
+            self._embedding_provider = VoyageEmbedding(self.config.embeddings.voyage)
         elif self.config.embeddings.provider == "local":
             if not self.config.embeddings.local:
                 raise ValueError("Local embedding config is missing")
             from .embeddings import LocalEmbedding
 
-            self.embedding_provider = LocalEmbedding(self.config.embeddings.local)
+            self._embedding_provider = LocalEmbedding(self.config.embeddings.local)
         else:
             raise ValueError(
                 f"Unsupported embedding provider: {self.config.embeddings.provider}"
@@ -129,28 +249,39 @@ class RAG:
             raise ValueError(f"Unsupported vector store provider: {provider}")
 
     def _init_llm(self) -> None:
+        # Priority 1: explicit constructor kwarg
+        if self._override_llm is not None:
+            self._llm_provider = self._override_llm
+            return
+
+        # Priority 2: module-level Settings override
+        if Settings.llm_provider is not None:
+            self._llm_provider = Settings.llm_provider
+            return
+
+        # Priority 3: config-driven initialisation
         if self.config.llm.provider == "openai":
             if not self.config.llm.openai:
                 raise ValueError("OpenAI LLM config is missing")
-            self.llm_provider: LLMProvider = OpenAILLM(self.config.llm.openai)
+            self._llm_provider = OpenAILLM(self.config.llm.openai)
         elif self.config.llm.provider == "gemini":
             if not self.config.llm.gemini:
                 raise ValueError("Gemini LLM config is missing")
             from .llm import GeminiLLM
 
-            self.llm_provider = GeminiLLM(self.config.llm.gemini)
+            self._llm_provider = GeminiLLM(self.config.llm.gemini)
         elif self.config.llm.provider == "anthropic":
             if not self.config.llm.anthropic:
                 raise ValueError("Anthropic LLM config is missing")
             from .llm import AnthropicLLM
 
-            self.llm_provider = AnthropicLLM(self.config.llm.anthropic)
+            self._llm_provider = AnthropicLLM(self.config.llm.anthropic)
         elif self.config.llm.provider == "cohere":
             if not self.config.llm.cohere:
                 raise ValueError("Cohere LLM config is missing")
             from .llm import CohereLLM
 
-            self.llm_provider = CohereLLM(self.config.llm.cohere)
+            self._llm_provider = CohereLLM(self.config.llm.cohere)
         else:
             raise ValueError(f"Unsupported LLM provider: {self.config.llm.provider}")
 
@@ -166,19 +297,19 @@ class RAG:
         elif strategy == "agentic":
             agentic_config = self.config.document_processing.agentic_chunking
             self.text_splitter = AgenticSplitter(
-                llm_provider=self.llm_provider,
+                llm_provider=self._llm_provider,
                 max_chunk_size=agentic_config.max_chunk_size,
                 similarity_threshold=agentic_config.similarity_threshold,
             )
         elif strategy == "proposition":
             prop_config = self.config.document_processing.proposition_chunking
             self.text_splitter = PropositionSplitter(
-                llm_provider=self.llm_provider,
+                llm_provider=self._llm_provider,
                 max_propositions_per_chunk=prop_config.max_propositions_per_chunk,
             )
         elif strategy == "semantic":
             self.text_splitter = SemanticSplitter(
-                embedding_provider=self.embedding_provider,
+                embedding_provider=self._embedding_provider,
                 config=self.config.document_processing.semantic_chunking,
             )
         elif strategy == "late":
@@ -193,49 +324,49 @@ class RAG:
 
         if strategy == "dense":
             base_retriever: BaseRetriever = Retriever(
-                embedding_provider=self.embedding_provider,
+                embedding_provider=self._embedding_provider,
                 vector_store=self.vector_store,
                 config=self.config.retrieval,
             )
         elif strategy == "graph_rag":
             base_retriever = BasicGraphRAGRetriever(
-                embedding_provider=self.embedding_provider,
+                embedding_provider=self._embedding_provider,
                 vector_store=self.vector_store,
-                llm_provider=self.llm_provider,
+                llm_provider=self._llm_provider,
                 config=self.config.retrieval,
             )
         elif strategy == "advanced_graph_rag":
             base_retriever = AdvancedGraphRAGRetriever(
-                embedding_provider=self.embedding_provider,
+                embedding_provider=self._embedding_provider,
                 vector_store=self.vector_store,
-                llm_provider=self.llm_provider,
+                llm_provider=self._llm_provider,
                 config=self.config.retrieval,
             )
         elif strategy == "raptor":
             base_retriever = RAPTORRetriever(
-                embedding_provider=self.embedding_provider,
+                embedding_provider=self._embedding_provider,
                 vector_store=self.vector_store,
-                llm_provider=self.llm_provider,
+                llm_provider=self._llm_provider,
                 config=self.config.retrieval,
             )
         elif strategy == "multi_query":
             from .retrieval import MultiQueryRetriever
 
             dense_retriever = Retriever(
-                embedding_provider=self.embedding_provider,
+                embedding_provider=self._embedding_provider,
                 vector_store=self.vector_store,
                 config=self.config.retrieval,
             )
             base_retriever = MultiQueryRetriever(
                 base_retriever=dense_retriever,
-                llm_provider=self.llm_provider,
+                llm_provider=self._llm_provider,
                 config=self.config.retrieval.multi_query,
             )
         elif strategy == "hybrid":
             from .retrieval import HybridRetriever
 
             base_retriever = HybridRetriever(
-                embedding_provider=self.embedding_provider,
+                embedding_provider=self._embedding_provider,
                 vector_store=self.vector_store,
                 config=self.config.retrieval,
             )
@@ -243,13 +374,13 @@ class RAG:
             from .retrieval import SelfRAGRetriever
 
             dense_retriever = Retriever(
-                embedding_provider=self.embedding_provider,
+                embedding_provider=self._embedding_provider,
                 vector_store=self.vector_store,
                 config=self.config.retrieval,
             )
             base_retriever = SelfRAGRetriever(
                 base_retriever=dense_retriever,
-                llm_provider=self.llm_provider,
+                llm_provider=self._llm_provider,
                 config=self.config.retrieval.self_rag,
             )
         else:
@@ -259,7 +390,7 @@ class RAG:
         if self.config.retrieval.corrective_rag_enabled:
             base_retriever = CorrectiveRAGRetriever(
                 base_retriever=base_retriever,
-                llm_provider=self.llm_provider,
+                llm_provider=self._llm_provider,
                 config=self.config.retrieval.corrective_rag,
             )
 
@@ -269,7 +400,7 @@ class RAG:
 
             base_retriever = ContextualCompressionRetriever(
                 base_retriever=base_retriever,
-                llm_provider=self.llm_provider,
+                llm_provider=self._llm_provider,
                 config=self.config.retrieval.contextual_compression,
             )
 
@@ -299,16 +430,16 @@ class RAG:
 
         if strategy == "standard":
             self.generation_strategy: GenerationStrategy = StandardGeneration(
-                llm_provider=self.llm_provider,
+                llm_provider=self._llm_provider,
             )
         elif strategy == "cove":
             self.generation_strategy = ChainOfVerificationGeneration(
-                llm_provider=self.llm_provider,
+                llm_provider=self._llm_provider,
                 max_verification_questions=self.config.cove.max_verification_questions,
             )
         elif strategy == "attributed":
             self.generation_strategy = AttributedGeneration(
-                llm_provider=self.llm_provider,
+                llm_provider=self._llm_provider,
                 citation_style=self.config.attributed_generation.citation_style,
             )
         else:
@@ -341,6 +472,10 @@ class RAG:
         else:
             raise ValueError(f"Unsupported PDF parser backend: {pdf_config.backend}")
 
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
     def ingest_pdf(self, file_path: str) -> Dict[str, int]:
         """Parse a PDF file and ingest it into the RAG pipeline.
 
@@ -361,18 +496,40 @@ class RAG:
         logger.info(f"Loaded {len(documents)} documents from PDF: {file_path}")
         return self.ingest_documents(documents)
 
+    def clear_index(self) -> None:
+        """Wipe the vector store and reset all retriever state.
+
+        Call this before re-ingesting with a different embedding model.
+        After calling, ingest your documents again with the new provider::
+
+            rag.embedding_provider = MyNewEmbedding()
+            rag.clear_index()
+            rag.ingest_documents(my_documents)
+
+        This reinitialises the vector store (fresh and empty) and the
+        retriever (so it references the new empty store).  Graph and RAPTOR
+        state is also reset by the new retriever construction.
+        """
+        self._init_vectorstore()  # brand-new empty store
+        self._init_retriever()  # retriever gets the fresh store
+        self._ingested_embedding_fp = None
+        logger.info("Index cleared. Re-ingest documents to populate the new store.")
+
     def ingest_documents(self, documents: List[Document]) -> Dict[str, int]:
+        # Record which embedding model we're using for this ingestion batch.
+        self._ingested_embedding_fp = self._make_embedding_id(self._embedding_provider)
+
         split_docs = self.text_splitter.split_documents(documents)
         logger.info(f"Split {len(documents)} documents into {len(split_docs)} chunks.")
 
         texts = [doc.content for doc in split_docs]
-        embeddings = self.embedding_provider.embed_documents(texts)
+        embeddings = self._embedding_provider.embed_documents(texts)
         logger.info(f"Generated {len(embeddings)} embeddings.")
 
         self.vector_store.add_documents(split_docs, embeddings)
         logger.info(f"Stored documents in {self.config.vectorstore.provider}.")
 
-        # Build specialized indexes for retriever wrappers
+        # Build specialised indexes for retriever wrappers
         inner = self._unwrap_retriever(self.retriever)
 
         if isinstance(inner, BasicGraphRAGRetriever):
@@ -394,6 +551,22 @@ class RAG:
             inner.index_documents(split_docs)
 
         return {"source_documents": len(documents), "chunks": len(split_docs)}
+
+    @staticmethod
+    def _make_embedding_id(provider: EmbeddingProvider) -> str:
+        """Build a stable string that identifies an embedding model.
+
+        Uses class name + model identifier (if the provider exposes one).
+        Catches both class changes (OpenAI → Local) and same-class model
+        string changes (text-embedding-3-small → text-embedding-3-large).
+        """
+        cls = type(provider).__name__
+        model = (
+            getattr(provider, "model", None)
+            or getattr(provider, "model_name", None)
+            or ""
+        )
+        return f"{cls}:{model}"
 
     @staticmethod
     def _unwrap_retriever(retriever: BaseRetriever) -> BaseRetriever:

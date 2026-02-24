@@ -4,6 +4,7 @@ from .base import BaseRetriever
 from ..document import Document
 from ..llm import LLMProvider, extract_json_from_llm
 from ..config import SelfRAGConfig
+from ..settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +29,22 @@ class SelfRAGRetriever(BaseRetriever):
     def __init__(
         self,
         base_retriever: BaseRetriever,
-        llm_provider: LLMProvider,
-        config: SelfRAGConfig,
+        llm_provider: Optional[LLMProvider] = None,
+        config: Optional[SelfRAGConfig] = None,
     ):
         self.base_retriever = base_retriever
-        self.llm_provider = llm_provider
+        self._llm_provider = llm_provider
         self.config = config
+
+    @property
+    def llm_provider(self) -> LLMProvider:
+        provider = self._llm_provider or Settings.llm_provider
+        if provider is None:
+            raise RuntimeError(
+                "No LLM provider available. Pass one to SelfRAGRetriever() "
+                "or set Settings.llm_provider."
+            )
+        return provider
 
     def _needs_retrieval(self, query: str) -> bool:
         """Decide whether the query needs retrieval or can be answered from knowledge.
@@ -157,7 +168,7 @@ class SelfRAGRetriever(BaseRetriever):
             return []
 
         # Step 4: Check support (optional, for top candidates only)
-        if self.config.check_support:
+        if self.config and self.config.check_support:
             supported = [doc for doc in relevant if self._is_supported(query, doc)]
             return supported[:top_k]
 

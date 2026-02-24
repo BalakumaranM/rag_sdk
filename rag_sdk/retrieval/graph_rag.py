@@ -10,6 +10,7 @@ from ..vectorstore import VectorStoreProvider
 from ..llm import LLMProvider
 from ..config import RetrievalConfig
 from ..graph.models import Entity, Relationship  # canonical definitions live in graph/
+from ..settings import Settings
 
 # Re-export so that existing `from rag_sdk.retrieval.graph_rag import Entity` imports keep working.
 __all__ = ["BasicGraphRAGRetriever", "Entity", "Relationship"]
@@ -27,22 +28,51 @@ class BasicGraphRAGRetriever(BaseRetriever):
 
     def __init__(
         self,
-        embedding_provider: EmbeddingProvider,
-        vector_store: VectorStoreProvider,
-        llm_provider: LLMProvider,
-        config: RetrievalConfig,
+        embedding_provider: Optional[EmbeddingProvider] = None,
+        vector_store: Optional[VectorStoreProvider] = None,
+        llm_provider: Optional[LLMProvider] = None,
+        config: Optional[RetrievalConfig] = None,
     ):
-        self.embedding_provider = embedding_provider
-        self.vector_store = vector_store
-        self.llm_provider = llm_provider
+        self._embedding_provider = embedding_provider
+        self._vector_store = vector_store
+        self._llm_provider = llm_provider
         self.config = config
         self.entities: Dict[str, Entity] = {}
         self.relationships: List[Relationship] = []
         self.adjacency: Dict[str, Set[str]] = {}
 
+    @property
+    def embedding_provider(self) -> EmbeddingProvider:
+        provider = self._embedding_provider or Settings.embedding_provider
+        if provider is None:
+            raise RuntimeError(
+                "No embedding provider available. Pass one to BasicGraphRAGRetriever() "
+                "or set Settings.embedding_provider."
+            )
+        return provider
+
+    @property
+    def vector_store(self) -> VectorStoreProvider:
+        if self._vector_store is None:
+            raise RuntimeError(
+                "No vector store available. Pass one to BasicGraphRAGRetriever()."
+            )
+        return self._vector_store
+
+    @property
+    def llm_provider(self) -> LLMProvider:
+        provider = self._llm_provider or Settings.llm_provider
+        if provider is None:
+            raise RuntimeError(
+                "No LLM provider available. Pass one to BasicGraphRAGRetriever() "
+                "or set Settings.llm_provider."
+            )
+        return provider
+
     def _extract_entities_and_relationships(
         self, text: str, document_id: str
     ) -> Tuple[List[Entity], List[Relationship]]:
+        assert self.config is not None, "config is required"
         max_entities = self.config.graph_rag.max_entities_per_chunk
         max_rels = self.config.graph_rag.max_relationships_per_chunk
 

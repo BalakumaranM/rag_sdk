@@ -4,6 +4,7 @@ from ..embeddings import EmbeddingProvider
 from ..vectorstore import VectorStoreProvider
 from ..document import Document
 from ..config import RetrievalConfig
+from ..settings import Settings
 
 
 class Retriever(BaseRetriever):
@@ -13,13 +14,30 @@ class Retriever(BaseRetriever):
 
     def __init__(
         self,
-        embedding_provider: EmbeddingProvider,
-        vector_store: VectorStoreProvider,
-        config: RetrievalConfig,
+        embedding_provider: Optional[EmbeddingProvider] = None,
+        vector_store: Optional[VectorStoreProvider] = None,
+        config: Optional[RetrievalConfig] = None,
     ):
-        self.embedding_provider = embedding_provider
-        self.vector_store = vector_store
+        self._embedding_provider = embedding_provider
+        self._vector_store = vector_store
         self.config = config
+
+    @property
+    def embedding_provider(self) -> EmbeddingProvider:
+        """Resolve lazily: explicit init arg, else module-level Settings."""
+        provider = self._embedding_provider or Settings.embedding_provider
+        if provider is None:
+            raise RuntimeError(
+                "No embedding provider available. Pass one to Retriever() "
+                "or set Settings.embedding_provider."
+            )
+        return provider
+
+    @property
+    def vector_store(self) -> VectorStoreProvider:
+        if self._vector_store is None:
+            raise RuntimeError("No vector store available. Pass one to Retriever().")
+        return self._vector_store
 
     def retrieve(
         self, query: str, top_k: int = 5, filters: Optional[Dict[str, Any]] = None
@@ -31,6 +49,7 @@ class Retriever(BaseRetriever):
         query_embedding = self.embedding_provider.embed_query(query)
 
         # 2. Search vector store
+        assert self.config is not None, "config is required"
         k = top_k or self.config.top_k
         results = self.vector_store.search(
             query_embedding=query_embedding, top_k=k, filters=filters

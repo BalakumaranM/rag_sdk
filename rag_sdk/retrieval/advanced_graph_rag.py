@@ -25,6 +25,7 @@ from ..embeddings import EmbeddingProvider
 from ..graph import Community, Entity, GraphIndexer, Relationship
 from ..llm import LLMProvider
 from ..vectorstore import VectorStoreProvider
+from ..settings import Settings
 from .base import BaseRetriever
 
 logger = logging.getLogger(__name__)
@@ -56,23 +57,52 @@ class AdvancedGraphRAGRetriever(BaseRetriever):
 
     def __init__(
         self,
-        embedding_provider: EmbeddingProvider,
-        vector_store: VectorStoreProvider,
-        llm_provider: LLMProvider,
-        config: RetrievalConfig,
+        embedding_provider: Optional[EmbeddingProvider] = None,
+        vector_store: Optional[VectorStoreProvider] = None,
+        llm_provider: Optional[LLMProvider] = None,
+        config: Optional[RetrievalConfig] = None,
     ):
         if not _NETWORKX_AVAILABLE:
             raise ImportError(
                 "networkx is required for AdvancedGraphRAGRetriever. "
                 "Install it with: pip install rag_sdk[advanced-graph-rag]"
             )
-        self.embedding_provider = embedding_provider
-        self.vector_store = vector_store
-        self.llm_provider = llm_provider
+        self._embedding_provider = embedding_provider
+        self._vector_store = vector_store
+        self._llm_provider = llm_provider
         self.config = config
 
         # Indexer owns all graph state; retriever reads from it at query time.
+        # Pass through the explicit provider args (may be None → indexer reads Settings).
         self._indexer = GraphIndexer(embedding_provider, llm_provider, config)
+
+    @property
+    def embedding_provider(self) -> EmbeddingProvider:
+        provider = self._embedding_provider or Settings.embedding_provider
+        if provider is None:
+            raise RuntimeError(
+                "No embedding provider available. Pass one to AdvancedGraphRAGRetriever() "
+                "or set Settings.embedding_provider."
+            )
+        return provider
+
+    @property
+    def vector_store(self) -> VectorStoreProvider:
+        if self._vector_store is None:
+            raise RuntimeError(
+                "No vector store available. Pass one to AdvancedGraphRAGRetriever()."
+            )
+        return self._vector_store
+
+    @property
+    def llm_provider(self) -> LLMProvider:
+        provider = self._llm_provider or Settings.llm_provider
+        if provider is None:
+            raise RuntimeError(
+                "No LLM provider available. Pass one to AdvancedGraphRAGRetriever() "
+                "or set Settings.llm_provider."
+            )
+        return provider
 
     # ---------------------------------------------------------------------------
     # Convenience accessors — keeps external code that reads retriever.entities etc. working
@@ -192,6 +222,7 @@ class AdvancedGraphRAGRetriever(BaseRetriever):
         self, query: str, top_k: int, filters: Optional[Dict[str, Any]]
     ) -> List[Document]:
         """Graph-guided local search: entity neighborhood + dense chunks."""
+        assert self.config is not None, "config is required"
         cfg = self.config.advanced_graph_rag
 
         query_embedding = self.embedding_provider.embed_query(query)
@@ -242,6 +273,7 @@ class AdvancedGraphRAGRetriever(BaseRetriever):
         self, query: str, top_k: int, filters: Optional[Dict[str, Any]]
     ) -> List[Document]:
         """Map-reduce over community summaries for broad, dataset-spanning queries."""
+        assert self.config is not None, "config is required"
         cfg = self.config.advanced_graph_rag
 
         query_embedding = self.embedding_provider.embed_query(query)
@@ -301,6 +333,7 @@ class AdvancedGraphRAGRetriever(BaseRetriever):
         self, query: str, top_k: int, filters: Optional[Dict[str, Any]]
     ) -> List[Document]:
         """DRIFT search: HyDE entry point + iterative follow-up retrieval."""
+        assert self.config is not None, "config is required"
         cfg = self.config.advanced_graph_rag
         collected: Dict[str, Document] = {}
 
@@ -392,6 +425,7 @@ class AdvancedGraphRAGRetriever(BaseRetriever):
             )
             return [doc for doc, _ in results]
 
+        assert self.config is not None, "config is required"
         mode = self.config.advanced_graph_rag.search_mode
         if mode == "global":
             return self._global_search(query, top_k, filters)

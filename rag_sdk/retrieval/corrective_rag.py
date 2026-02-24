@@ -6,6 +6,7 @@ from .base import BaseRetriever
 from ..document import Document
 from ..llm import LLMProvider
 from ..config import CorrectiveRAGConfig
+from ..settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +17,22 @@ class CorrectiveRAGRetriever(BaseRetriever):
     def __init__(
         self,
         base_retriever: BaseRetriever,
-        llm_provider: LLMProvider,
-        config: CorrectiveRAGConfig,
+        llm_provider: Optional[LLMProvider] = None,
+        config: Optional[CorrectiveRAGConfig] = None,
     ):
         self.base_retriever = base_retriever
-        self.llm_provider = llm_provider
+        self._llm_provider = llm_provider
         self.config = config
+
+    @property
+    def llm_provider(self) -> LLMProvider:
+        provider = self._llm_provider or Settings.llm_provider
+        if provider is None:
+            raise RuntimeError(
+                "No LLM provider available. Pass one to CorrectiveRAGRetriever() "
+                "or set Settings.llm_provider."
+            )
+        return provider
 
     def _evaluate_relevance(
         self, query: str, documents: List[Document]
@@ -78,6 +89,7 @@ class CorrectiveRAGRetriever(BaseRetriever):
     def retrieve(
         self, query: str, top_k: int = 5, filters: Optional[Dict[str, Any]] = None
     ) -> List[Document]:
+        assert self.config is not None, "config is required"
         current_query = query
         min_relevant = max(1, int(top_k * self.config.relevance_threshold))
 

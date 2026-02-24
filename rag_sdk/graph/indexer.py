@@ -12,7 +12,7 @@ import json
 import logging
 import re
 import uuid
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 try:
     import networkx as nx
@@ -26,6 +26,7 @@ from ..config import RetrievalConfig
 from ..document import Document
 from ..embeddings import EmbeddingProvider
 from ..llm import LLMProvider
+from ..settings import Settings
 from .models import Community, Entity, Relationship
 
 logger = logging.getLogger(__name__)
@@ -119,23 +120,43 @@ class GraphIndexer:
 
     def __init__(
         self,
-        embedding_provider: EmbeddingProvider,
-        llm_provider: LLMProvider,
-        config: RetrievalConfig,
+        embedding_provider: Optional[EmbeddingProvider] = None,
+        llm_provider: Optional[LLMProvider] = None,
+        config: Optional[RetrievalConfig] = None,
     ):
         if not _NETWORKX_AVAILABLE:
             raise ImportError(
                 "networkx is required for GraphIndexer. "
                 "Install it with: pip install rag_sdk[advanced-graph-rag]"
             )
-        self.embedding_provider = embedding_provider
-        self.llm_provider = llm_provider
+        self._embedding_provider = embedding_provider
+        self._llm_provider = llm_provider
         self.config = config
 
         self.entities: Dict[str, Entity] = {}
         self.relationships: List[Relationship] = []
         self.graph: "nx.Graph" = nx.Graph()
         self.communities: Dict[str, Community] = {}
+
+    @property
+    def embedding_provider(self) -> EmbeddingProvider:
+        provider = self._embedding_provider or Settings.embedding_provider
+        if provider is None:
+            raise RuntimeError(
+                "No embedding provider available. Pass one to GraphIndexer() "
+                "or set Settings.embedding_provider."
+            )
+        return provider
+
+    @property
+    def llm_provider(self) -> LLMProvider:
+        provider = self._llm_provider or Settings.llm_provider
+        if provider is None:
+            raise RuntimeError(
+                "No LLM provider available. Pass one to GraphIndexer() "
+                "or set Settings.llm_provider."
+            )
+        return provider
 
     # ---------------------------------------------------------------------------
     # Public API
@@ -152,6 +173,7 @@ class GraphIndexer:
         5. Generate a structured LLM report per community.
         6. Embed community summaries for semantic scoring at query time.
         """
+        assert self.config is not None, "config is required"
         cfg = self.config.advanced_graph_rag
 
         entity_descs: Dict[str, List[str]] = {}
@@ -255,6 +277,7 @@ class GraphIndexer:
         self, text: str, document_id: str
     ) -> Tuple[List[Entity], List[Relationship]]:
         """Extract entities and relationships from a chunk using a few-shot JSON prompt."""
+        assert self.config is not None, "config is required"
         cfg = self.config.advanced_graph_rag
         max_ents = cfg.max_entities_per_chunk
         max_rels = cfg.max_relationships_per_chunk
@@ -355,6 +378,7 @@ class GraphIndexer:
         if self.graph.number_of_nodes() == 0:
             return []
 
+        assert self.config is not None, "config is required"
         cfg = self.config.advanced_graph_rag
         levels = max(cfg.community_levels, 1)
         results: List[Tuple[int, Set[str]]] = []

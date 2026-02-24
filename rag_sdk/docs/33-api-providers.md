@@ -1,6 +1,15 @@
 # API Reference: Provider ABCs
 
-All provider base classes are abstract (ABC). Each defines the interface that concrete implementations must follow.
+All provider base classes are abstract (ABC). Each defines the interface that concrete
+implementations must follow.
+
+> **Lazy provider resolution:** All built-in components (`Retriever`,
+> `BasicGraphRAGRetriever`, `AdvancedGraphRAGRetriever`, `RAPTORRetriever`,
+> `HybridRetriever`, `GraphIndexer`, all generation strategies, and all splitters)
+> accept `None` for `embedding_provider` and `llm_provider` in their constructors.
+> When `None`, the component reads from `Settings.embedding_provider` /
+> `Settings.llm_provider` lazily at call time.  Pass an explicit value to override
+> `Settings` for a specific instance.
 
 ---
 
@@ -257,9 +266,9 @@ Manages the Advanced GraphRAG ingestion pipeline. Handles entity/relationship ex
 class GraphIndexer:
     def __init__(
         self,
-        embedding_provider: EmbeddingProvider,
-        llm_provider: LLMProvider,
-        config: RetrievalConfig,
+        embedding_provider: Optional[EmbeddingProvider] = None,
+        llm_provider: Optional[LLMProvider] = None,
+        config: Optional[RetrievalConfig] = None,
     ) -> None: ...
 
     def build_graph(self, documents: List[Document]) -> None:

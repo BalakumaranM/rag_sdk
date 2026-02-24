@@ -7,6 +7,7 @@ from ..embeddings import EmbeddingProvider
 from ..vectorstore import VectorStoreProvider
 from ..llm import LLMProvider
 from ..config import RetrievalConfig
+from ..settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -45,15 +46,43 @@ class RAPTORRetriever(BaseRetriever):
 
     def __init__(
         self,
-        embedding_provider: EmbeddingProvider,
-        vector_store: VectorStoreProvider,
-        llm_provider: LLMProvider,
-        config: RetrievalConfig,
+        embedding_provider: Optional[EmbeddingProvider] = None,
+        vector_store: Optional[VectorStoreProvider] = None,
+        llm_provider: Optional[LLMProvider] = None,
+        config: Optional[RetrievalConfig] = None,
     ):
-        self.embedding_provider = embedding_provider
-        self.vector_store = vector_store
-        self.llm_provider = llm_provider
+        self._embedding_provider = embedding_provider
+        self._vector_store = vector_store
+        self._llm_provider = llm_provider
         self.config = config
+
+    @property
+    def embedding_provider(self) -> EmbeddingProvider:
+        provider = self._embedding_provider or Settings.embedding_provider
+        if provider is None:
+            raise RuntimeError(
+                "No embedding provider available. Pass one to RAPTORRetriever() "
+                "or set Settings.embedding_provider."
+            )
+        return provider
+
+    @property
+    def vector_store(self) -> VectorStoreProvider:
+        if self._vector_store is None:
+            raise RuntimeError(
+                "No vector store available. Pass one to RAPTORRetriever()."
+            )
+        return self._vector_store
+
+    @property
+    def llm_provider(self) -> LLMProvider:
+        provider = self._llm_provider or Settings.llm_provider
+        if provider is None:
+            raise RuntimeError(
+                "No LLM provider available. Pass one to RAPTORRetriever() "
+                "or set Settings.llm_provider."
+            )
+        return provider
 
     def _summarize_cluster(self, texts: List[str]) -> str:
         combined = "\n\n---\n\n".join(texts)
@@ -75,6 +104,7 @@ class RAPTORRetriever(BaseRetriever):
             return " ".join(t.split(".")[0] + "." for t in texts[:3])
 
     def build_tree(self, documents: List[Document]) -> None:
+        assert self.config is not None, "config is required"
         num_levels = self.config.raptor.num_levels
         max_clusters = self.config.raptor.max_clusters_per_level
 

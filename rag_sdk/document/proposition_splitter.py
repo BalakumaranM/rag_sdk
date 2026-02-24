@@ -1,10 +1,11 @@
 import json
 import logging
 import re
-from typing import List
+from typing import List, Optional
 from .base import BaseTextSplitter
 from .models import Document
 from ..llm import LLMProvider
+from ..settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -14,11 +15,21 @@ class PropositionSplitter(BaseTextSplitter):
 
     def __init__(
         self,
-        llm_provider: LLMProvider,
+        llm_provider: Optional[LLMProvider] = None,
         max_propositions_per_chunk: int = 5,
     ):
-        self.llm_provider = llm_provider
+        self._llm_provider = llm_provider
         self.max_propositions_per_chunk = max_propositions_per_chunk
+
+    @property
+    def llm_provider(self) -> LLMProvider:
+        provider = self._llm_provider or Settings.llm_provider
+        if provider is None:
+            raise RuntimeError(
+                "No LLM provider available. Pass one to PropositionSplitter() "
+                "or set Settings.llm_provider."
+            )
+        return provider
 
     def _extract_propositions(self, text: str) -> List[str]:
         prompt = (

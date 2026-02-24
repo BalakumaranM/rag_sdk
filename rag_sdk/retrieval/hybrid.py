@@ -6,6 +6,7 @@ from ..document import Document
 from ..embeddings import EmbeddingProvider
 from ..vectorstore import VectorStoreProvider
 from ..config import RetrievalConfig
+from ..settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -26,20 +27,38 @@ class HybridRetriever(BaseRetriever):
 
     def __init__(
         self,
-        embedding_provider: EmbeddingProvider,
-        vector_store: VectorStoreProvider,
-        config: RetrievalConfig,
+        embedding_provider: Optional[EmbeddingProvider] = None,
+        vector_store: Optional[VectorStoreProvider] = None,
+        config: Optional[RetrievalConfig] = None,
     ):
-        self.embedding_provider = embedding_provider
-        self.vector_store = vector_store
+        self._embedding_provider = embedding_provider
+        self._vector_store = vector_store
         self.config = config
         self.bm25 = BM25(
-            k1=config.hybrid.bm25_k1,
-            b=config.hybrid.bm25_b,
+            k1=config.hybrid.bm25_k1 if config else 1.5,
+            b=config.hybrid.bm25_b if config else 0.75,
         )
-        self.bm25_weight = config.hybrid.bm25_weight
-        self.rrf_k = config.hybrid.rrf_k
+        self.bm25_weight = config.hybrid.bm25_weight if config else 0.5
+        self.rrf_k = config.hybrid.rrf_k if config else 60
         self._indexed = False
+
+    @property
+    def embedding_provider(self) -> EmbeddingProvider:
+        provider = self._embedding_provider or Settings.embedding_provider
+        if provider is None:
+            raise RuntimeError(
+                "No embedding provider available. Pass one to HybridRetriever() "
+                "or set Settings.embedding_provider."
+            )
+        return provider
+
+    @property
+    def vector_store(self) -> VectorStoreProvider:
+        if self._vector_store is None:
+            raise RuntimeError(
+                "No vector store available. Pass one to HybridRetriever()."
+            )
+        return self._vector_store
 
     def index_documents(self, documents: List[Document]) -> None:
         """Build BM25 index from documents. Called during ingestion.

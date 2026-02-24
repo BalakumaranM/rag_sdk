@@ -1,7 +1,8 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from .base import GenerationStrategy
 from ..document import Document
 from ..llm import LLMProvider
+from ..settings import Settings
 
 
 class StandardGeneration(GenerationStrategy):
@@ -9,8 +10,19 @@ class StandardGeneration(GenerationStrategy):
     Standard RAG generation: concatenate context and prompt LLM.
     """
 
-    def __init__(self, llm_provider: LLMProvider):
-        self.llm_provider = llm_provider
+    def __init__(self, llm_provider: Optional[LLMProvider] = None):
+        self._llm_provider = llm_provider
+
+    @property
+    def llm_provider(self) -> LLMProvider:
+        """Resolve lazily: explicit init arg, else module-level Settings."""
+        provider = self._llm_provider or Settings.llm_provider
+        if provider is None:
+            raise RuntimeError(
+                "No LLM provider available. Pass one to StandardGeneration() "
+                "or set Settings.llm_provider."
+            )
+        return provider
 
     def generate(self, query: str, documents: List[Document]) -> Dict[str, Any]:
         context_text = "\n\n".join([doc.content for doc in documents])
