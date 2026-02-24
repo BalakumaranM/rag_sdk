@@ -522,9 +522,9 @@ def test_invalid_retrieval_strategy():
     with pytest.raises(ValueError, match="Unsupported retrieval strategy"):
         rag = RAG.__new__(RAG)
         rag.config = config
-        rag.embedding_provider = MagicMock()
+        rag._embedding_provider = MagicMock()
         rag.vector_store = MagicMock()
-        rag.llm_provider = MagicMock()
+        rag._llm_provider = MagicMock()
         rag._init_retriever()
 
 
@@ -536,5 +536,5 @@ def test_invalid_generation_strategy():
     with pytest.raises(ValueError, match="Unsupported generation strategy"):
         rag = RAG.__new__(RAG)
         rag.config = config
-        rag.llm_provider = MagicMock()
+        rag._llm_provider = MagicMock()
         rag._init_generation()
