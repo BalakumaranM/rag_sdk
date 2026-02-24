@@ -36,6 +36,7 @@ qdrant = ["qdrant-client>=1.7.0"]
 cross-encoder = ["sentence-transformers>=2.2.0"]
 late-chunking = ["transformers>=4.30.0", "torch>=2.0.0"]
 local-embeddings = ["sentence-transformers>=2.2.0"]
+advanced-graph-rag = ["networkx>=3.0"]
 
 [tool.setuptools.packages.find]
 include = ["rag_sdk*"]

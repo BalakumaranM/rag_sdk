@@ -273,6 +273,35 @@ class GraphRAGConfig(BaseModel):
     max_relationships_per_chunk: int = 15
 
 
+class AdvancedGraphRAGConfig(BaseModel):
+    max_entities_per_chunk: int = 10
+    max_relationships_per_chunk: int = 15
+    search_mode: str = "local"  # "local", "global", "drift"
+    top_communities: int = 3
+    max_graph_hops: int = 2
+    drift_max_rounds: int = 2
+    drift_follow_up_questions: int = 3
+    community_detection_algorithm: str = "louvain"  # "leiden" | "louvain"
+    community_levels: int = 2  # hierarchy depth (0=coarsest)
+    node2vec_enabled: bool = False  # requires node2vec package
+    relationship_weight_in_graph: bool = True  # use relationship weight on edges
+    # Entity types to extract — override with domain-specific types for better precision
+    entity_types: List[str] = Field(
+        default_factory=lambda: [
+            "person",
+            "organization",
+            "location",
+            "event",
+            "concept",
+            "technology",
+            "product",
+            "process",
+            "document",
+            "system",
+        ]
+    )
+
+
 class RAPTORConfig(BaseModel):
     num_levels: int = 3
     clustering_method: str = "kmeans"
@@ -329,9 +358,7 @@ class ContextualCompressionConfig(BaseModel):
 
 
 class RetrievalConfig(BaseModel):
-    strategy: str = (
-        "dense"  # "dense", "graph_rag", "raptor", "multi_query", "hybrid", "self_rag"
-    )
+    strategy: str = "dense"  # "dense", "graph_rag", "advanced_graph_rag", "raptor", "multi_query", "hybrid", "self_rag"
     top_k: int = 5
     corrective_rag_enabled: bool = False
     contextual_compression_enabled: bool = False
@@ -343,6 +370,9 @@ class RetrievalConfig(BaseModel):
         default_factory=ContextualCompressionConfig
     )
     graph_rag: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
+    advanced_graph_rag: AdvancedGraphRAGConfig = Field(
+        default_factory=AdvancedGraphRAGConfig
+    )
     raptor: RAPTORConfig = Field(default_factory=RAPTORConfig)
     corrective_rag: CorrectiveRAGConfig = Field(default_factory=CorrectiveRAGConfig)
 

@@ -8,7 +8,7 @@ from rag_sdk.document.agentic_splitter import AgenticSplitter
 from rag_sdk.document.proposition_splitter import PropositionSplitter
 from rag_sdk.retrieval.base import BaseRetriever
 from rag_sdk.retrieval.retriever import Retriever
-from rag_sdk.retrieval.graph_rag import GraphRAGRetriever, Entity
+from rag_sdk.retrieval.graph_rag import BasicGraphRAGRetriever, Entity
 from rag_sdk.retrieval.raptor import RAPTORRetriever, _kmeans
 from rag_sdk.retrieval.corrective_rag import CorrectiveRAGRetriever
 from rag_sdk.generation.standard import StandardGeneration
@@ -219,7 +219,7 @@ def test_graph_rag_build_graph():
     mock_vectorstore = MagicMock()
     config = Config().retrieval
 
-    retriever = GraphRAGRetriever(
+    retriever = BasicGraphRAGRetriever(
         embedding_provider=mock_embedding,
         vector_store=mock_vectorstore,
         llm_provider=mock_llm,
@@ -249,7 +249,7 @@ def test_graph_rag_retrieve():
     mock_vectorstore.search.return_value = [(doc, 0.9)]
 
     config = Config().retrieval
-    retriever = GraphRAGRetriever(
+    retriever = BasicGraphRAGRetriever(
         embedding_provider=mock_embedding,
         vector_store=mock_vectorstore,
         llm_provider=mock_llm,

@@ -18,7 +18,8 @@ from .vectorstore import VectorStoreProvider, InMemoryVectorStore
 from .llm import LLMProvider, OpenAILLM
 from .retrieval import (
     Retriever,
-    GraphRAGRetriever,
+    BasicGraphRAGRetriever,
+    AdvancedGraphRAGRetriever,
     RAPTORRetriever,
     CorrectiveRAGRetriever,
 )
@@ -197,7 +198,14 @@ class RAG:
                 config=self.config.retrieval,
             )
         elif strategy == "graph_rag":
-            base_retriever = GraphRAGRetriever(
+            base_retriever = BasicGraphRAGRetriever(
+                embedding_provider=self.embedding_provider,
+                vector_store=self.vector_store,
+                llm_provider=self.llm_provider,
+                config=self.config.retrieval,
+            )
+        elif strategy == "advanced_graph_rag":
+            base_retriever = AdvancedGraphRAGRetriever(
                 embedding_provider=self.embedding_provider,
                 vector_store=self.vector_store,
                 llm_provider=self.llm_provider,
@@ -367,8 +375,12 @@ class RAG:
         # Build specialized indexes for retriever wrappers
         inner = self._unwrap_retriever(self.retriever)
 
-        if isinstance(inner, GraphRAGRetriever):
-            logger.info("Building knowledge graph for Graph RAG...")
+        if isinstance(inner, BasicGraphRAGRetriever):
+            logger.info("Building knowledge graph for Basic Graph RAG...")
+            inner.build_graph(split_docs)
+
+        if isinstance(inner, AdvancedGraphRAGRetriever):
+            logger.info("Building knowledge graph for Advanced Graph RAG...")
             inner.build_graph(split_docs)
 
         if isinstance(inner, RAPTORRetriever):

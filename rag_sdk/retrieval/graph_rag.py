@@ -1,35 +1,29 @@
 import json
 import logging
 import re
-from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, Set, Tuple
+
 from .base import BaseRetriever
 from ..document import Document
 from ..embeddings import EmbeddingProvider
 from ..vectorstore import VectorStoreProvider
 from ..llm import LLMProvider
 from ..config import RetrievalConfig
+from ..graph.models import Entity, Relationship  # canonical definitions live in graph/
+
+# Re-export so that existing `from rag_sdk.retrieval.graph_rag import Entity` imports keep working.
+__all__ = ["BasicGraphRAGRetriever", "Entity", "Relationship"]
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class Entity:
-    name: str
-    entity_type: str = ""
-    document_ids: List[str] = field(default_factory=list)
+class BasicGraphRAGRetriever(BaseRetriever):
+    """Combines in-memory knowledge graph traversal with dense retrieval.
 
-
-@dataclass
-class Relationship:
-    source: str
-    target: str
-    relation: str
-    document_ids: List[str] = field(default_factory=list)
-
-
-class GraphRAGRetriever(BaseRetriever):
-    """Combines in-memory knowledge graph traversal with dense retrieval."""
+    Builds a knowledge graph from documents by extracting entities and
+    relationships via LLM, then boosts dense retrieval scores for documents
+    connected to query-relevant entities via graph traversal.
+    """
 
     def __init__(
         self,
@@ -135,7 +129,6 @@ class GraphRAGRetriever(BaseRetriever):
         except Exception as e:
             logger.warning(f"Query entity extraction failed: {e}")
 
-        # Fallback: use words longer than 3 chars
         return [w.lower() for w in query.split() if len(w) > 3]
 
     def _get_graph_document_ids(
@@ -146,7 +139,6 @@ class GraphRAGRetriever(BaseRetriever):
 
         frontier = set()
         for entity_name in query_entities:
-            # Fuzzy match: check if query entity is a substring of any graph entity
             for graph_entity_name in self.entities:
                 if entity_name in graph_entity_name or graph_entity_name in entity_name:
                     frontier.add(graph_entity_name)
@@ -170,22 +162,18 @@ class GraphRAGRetriever(BaseRetriever):
     def retrieve(
         self, query: str, top_k: int = 5, filters: Optional[Dict[str, Any]] = None
     ) -> List[Document]:
-        # Dense retrieval
         query_embedding = self.embedding_provider.embed_query(query)
         dense_results = self.vector_store.search(
             query_embedding=query_embedding, top_k=top_k, filters=filters
         )
 
-        # Graph-based retrieval
         query_entities = self._extract_query_entities(query)
         graph_doc_ids = self._get_graph_document_ids(query_entities)
 
-        # Combine: boost graph-matched documents
         doc_scores: Dict[str, Tuple[Document, float]] = {}
         for doc, score in dense_results:
             boost = 1.2 if doc.id in graph_doc_ids else 1.0
             doc_scores[doc.id] = (doc, score * boost)
 
-        # Sort by score and return top_k
         sorted_docs = sorted(doc_scores.values(), key=lambda x: x[1], reverse=True)
         return [doc for doc, score in sorted_docs[:top_k]]
