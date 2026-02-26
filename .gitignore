@@ -50,3 +50,7 @@ page6_*.md
 page6_*.json
 project_plans/
 GraphRAG-Breakdown-main/
+
+# Research experiments — downloaded data and run outputs
+research/data/
+research/results/
