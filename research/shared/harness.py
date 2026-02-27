@@ -1,14 +1,27 @@
 """Evaluation harness for all research phases.
 
-Workflow per experiment
------------------------
-1. Build a single RAG instance from (config, embedding_provider, llm_provider).
-2. For each HotpotQA sample:
-   a. ``rag.clear_index()``  — wipes the in-memory vector store.
-   b. ``rag.ingest_documents(sample.to_documents())``  — ingest the 10 context paragraphs.
-   c. ``rag.query(sample.question)``  — retrieve + generate.
-   d. Compute retrieval & answer metrics against HotpotQA ground truth.
-3. Aggregate and save results to ``results/<experiment_name>.json``.
+Two evaluation modes
+--------------------
+per_question (default)
+    For each sample: clear index → ingest its 10 docs → query → measure.
+    Search space: ~20 chunks.
+    Easier but clean isolation. Good for Phase 1 (baseline) and Phase 2 (chunking),
+    where we want to measure chunking quality without corpus-size interference.
+
+shared_corpus
+    Deduplicate all docs from all samples by Wikipedia title, ingest once,
+    then query every sample against the shared corpus.
+    Search space: ~1,500–2,000 chunks for 100 questions.
+    More realistic — retriever must find 2 gold articles among ~200 unique titles.
+    Recommended for Phase 3 (retrieval) and beyond.
+
+Choosing a mode
+---------------
+    run_experiment(..., mode="per_question")   # default
+    run_experiment(..., mode="shared_corpus")
+
+The result JSON and all metric definitions are identical in both modes.
+The only difference is the corpus the retriever sees at query time.
 
 Metrics
 -------
@@ -36,6 +49,7 @@ from typing import Any, Dict, List, Set
 
 from rag_sdk import RAG
 from rag_sdk.config import Config
+from rag_sdk.document.models import Document
 from rag_sdk.embeddings.base import EmbeddingProvider
 from rag_sdk.llm.base import LLMProvider
 
@@ -97,7 +111,89 @@ def _context_precision(retrieved: List[str], supporting: Set[str]) -> float:
     return sum(1 for s in retrieved if s in supporting) / len(retrieved)
 
 
-# ── Experiment runner ──────────────────────────────────────────────────────
+# ── Corpus builders ────────────────────────────────────────────────────────
+
+
+def _build_shared_corpus(samples: List[HotpotQASample]) -> List[Document]:
+    """Deduplicate all Wikipedia paragraphs across all samples by title.
+
+    The same Wikipedia article (e.g. "United States") can appear as a distractor
+    in many different questions. We store it once. The source title is the only
+    metadata we keep — is_supporting is question-specific and is computed at
+    evaluation time from the sample object, not from document metadata.
+    """
+    seen: Dict[str, bool] = {}
+    docs = []
+    for sample in samples:
+        for title, sentences in sample.context:
+            if title not in seen:
+                seen[title] = True
+                docs.append(
+                    Document(
+                        content=title + "\n\n" + " ".join(sentences),
+                        metadata={"source": title},
+                    )
+                )
+    logger.info(
+        "Shared corpus: %d unique Wikipedia articles from %d questions.",
+        len(docs),
+        len(samples),
+    )
+    return docs
+
+
+# ── Inner loops ────────────────────────────────────────────────────────────
+
+
+def _eval_row(sample: HotpotQASample, result: Dict[str, Any]) -> Dict[str, Any]:
+    """Build one result row from a rag.query() result and a HotpotQA sample."""
+    retrieved_sources = [
+        doc.metadata.get("source", "") for doc in result.get("sources", [])
+    ]
+    supporting = sample.supporting_titles
+    return {
+        "question_id": sample.id,
+        "question": sample.question,
+        "level": sample.level,
+        "type": sample.type,
+        "answer": result["answer"],
+        "ground_truth": sample.answer,
+        "retrieved_sources": retrieved_sources,
+        "supporting_titles": list(supporting),
+        "context_recall": _context_recall(retrieved_sources, supporting),
+        "context_precision": _context_precision(retrieved_sources, supporting),
+        "exact_match": _exact_match(result["answer"], sample.answer),
+        "f1": _token_f1(result["answer"], sample.answer),
+        "latency": result.get("latency", 0.0),
+    }
+
+
+def _run_per_question(
+    rag: RAG, samples: List[HotpotQASample], desc: str
+) -> List[Dict[str, Any]]:
+    """Clear → ingest 10 docs → query, repeated for each sample."""
+    rows = []
+    for sample in tqdm(samples, desc=desc):
+        rag.clear_index()
+        rag.ingest_documents(sample.to_documents())
+        rows.append(_eval_row(sample, rag.query(sample.question)))
+    return rows
+
+
+def _run_shared_corpus(
+    rag: RAG, samples: List[HotpotQASample], desc: str
+) -> List[Dict[str, Any]]:
+    """Ingest all unique docs once, query every sample against the shared corpus."""
+    corpus = _build_shared_corpus(samples)
+    logger.info("Ingesting shared corpus (%d documents)…", len(corpus))
+    rag.ingest_documents(corpus)
+    rows = []
+    for sample in tqdm(samples, desc=desc):
+        rows.append(_eval_row(sample, rag.query(sample.question)))
+    return rows
+
+
+# ── Public API ─────────────────────────────────────────────────────────────
 
 
 def run_experiment(
@@ -107,47 +203,40 @@ def run_experiment(
     llm_provider: LLMProvider,
     experiment_name: str,
     results_dir: Path = RESULTS_DIR,
+    mode: str = "per_question",
 ) -> Dict[str, Any]:
     """Run the evaluation loop for one configuration.
 
-    Returns the full result dict (metrics + per-sample rows) and writes it
-    to ``results_dir/<experiment_name>.json``.
+    Args:
+        config: RAG configuration (chunking, retrieval, generation strategy).
+        samples: HotpotQA samples to evaluate.
+        embedding_provider: Embedding model to use.
+        llm_provider: LLM to use for generation (and LLM-based retrievers).
+        experiment_name: Used for the output filename and result JSON key.
+        results_dir: Directory where the JSON result file is written.
+        mode: "per_question" — fresh 10-doc corpus per sample (easier, isolated).
+              "shared_corpus" — one shared corpus from all samples (harder, realistic).
+
+    Returns:
+        Dict with "experiment", "mode", "metrics", "rows", and "output_file".
+        Also writes the same dict to ``results_dir/<experiment_name>.json``.
     """
+    if mode not in ("per_question", "shared_corpus"):
+        raise ValueError(
+            f"mode must be 'per_question' or 'shared_corpus', got {mode!r}"
+        )
+
     results_dir = Path(results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
 
     rag = RAG(config, embedding_provider=embedding_provider, llm_provider=llm_provider)
 
-    rows: List[Dict[str, Any]] = []
+    logger.info("Running %s [mode=%s, n=%d]", experiment_name, mode, len(samples))
 
-    for sample in tqdm(samples, desc=experiment_name):
-        rag.clear_index()
-        rag.ingest_documents(sample.to_documents())
-
-        result = rag.query(sample.question)
-
-        retrieved_sources = [
-            doc.metadata.get("source", "") for doc in result.get("sources", [])
-        ]
-        supporting = sample.supporting_titles
-
-        rows.append(
-            {
-                "question_id": sample.id,
-                "question": sample.question,
-                "level": sample.level,
-                "type": sample.type,
-                "answer": result["answer"],
-                "ground_truth": sample.answer,
-                "retrieved_sources": retrieved_sources,
-                "supporting_titles": list(supporting),
-                "context_recall": _context_recall(retrieved_sources, supporting),
-                "context_precision": _context_precision(retrieved_sources, supporting),
-                "exact_match": _exact_match(result["answer"], sample.answer),
-                "f1": _token_f1(result["answer"], sample.answer),
-                "latency": result.get("latency", 0.0),
-            }
-        )
+    if mode == "per_question":
+        rows = _run_per_question(rag, samples, desc=experiment_name)
+    else:
+        rows = _run_shared_corpus(rag, samples, desc=experiment_name)
 
     n = len(rows)
     metrics = {
@@ -161,6 +250,7 @@ def run_experiment(
 
     output: Dict[str, Any] = {
         "experiment": experiment_name,
+        "mode": mode,
         "metrics": metrics,
         "rows": rows,
     }
