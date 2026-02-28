@@ -172,7 +172,7 @@ wildcard — it changes embeddings, not chunk content.
 
 ---
 
-## Phase 3: Retrieval Strategy Ablation (Planned)
+## Phase 3: Retrieval Strategy Ablation (Built)
 
 **What changes:** The retriever. Uses best chunker from Phase 2.
 
@@ -270,7 +270,7 @@ layouts. This phase tests whether our gains generalise.
 |-------|--------|--------|-------------|
 | 1 | ✅ Built + pushed | `research/phase1_baseline/run.py` | `research/results/phase1_baseline.json` |
 | 2 | ✅ Built + pushed | `research/phase2_chunking/run.py` | `research/results/phase2_chunking_<id>.json` |
-| 3 | ⬜ Planned | `research/phase3_retrieval/run.py` | — |
+| 3 | ✅ Built + pushed | `research/phase3_retrieval/run.py` | `research/results/phase3_retrieval_<id>.json` |
 | 4 | ⬜ Planned | `research/phase4_reranking/run.py` | — |
 | 5 | ⬜ Planned | `research/phase5_generation/run.py` | — |
 | 6 | ⬜ Planned | `research/phase6_best_combo/run.py` | — |
