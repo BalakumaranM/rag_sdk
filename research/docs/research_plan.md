@@ -214,7 +214,7 @@ is whether precision improvement is worth the added latency.
 
 ---
 
-## Phase 5: Generation Strategy Ablation (Planned)
+## Phase 5: Generation Strategy Ablation (Built)
 
 **What changes:** How the answer is generated from the retrieved context.
 Uses best chunker + best retriever from prior phases.
@@ -272,6 +272,6 @@ layouts. This phase tests whether our gains generalise.
 | 2 | ✅ Built + pushed | `research/phase2_chunking/run.py` | `research/results/phase2_chunking_<id>.json` |
 | 3 | ✅ Built + pushed | `research/phase3_retrieval/run.py` | `research/results/phase3_retrieval_<id>.json` |
 | 4 | ✅ Built + pushed | `research/phase4_reranking/run.py` | `research/results/phase4_reranking_<id>.json` |
-| 5 | ⬜ Planned | `research/phase5_generation/run.py` | — |
+| 5 | ✅ Built + pushed | `research/phase5_generation/run.py` | `research/results/phase5_generation_<id>.json` |
 | 6 | ⬜ Planned | `research/phase6_best_combo/run.py` | — |
 | 7 | ⬜ Planned | `research/phase7_pdf_corpus/run.py` | — |
