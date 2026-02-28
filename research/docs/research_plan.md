@@ -247,7 +247,7 @@ from systematic RAG optimization.
 
 ---
 
-## Phase 7: PDF Corpus — Synthetic QA (Planned)
+## Phase 7: PDF Corpus — Synthetic QA (Built)
 
 **Purpose:** Validate that the Phase 6 best-of-breed configuration works on real
 domain documents, not just Wikipedia.
@@ -274,4 +274,4 @@ layouts. This phase tests whether our gains generalise.
 | 4 | ✅ Built + pushed | `research/phase4_reranking/run.py` | `research/results/phase4_reranking_<id>.json` |
 | 5 | ✅ Built + pushed | `research/phase5_generation/run.py` | `research/results/phase5_generation_<id>.json` |
 | 6 | ✅ Built + pushed | `research/phase6_best_combo/run.py` | `research/results/phase6_best_combo_<id>.json` |
-| 7 | ⬜ Planned | `research/phase7_pdf_corpus/run.py` | — |
+| 7 | ✅ Built + pushed | `research/phase7_pdf_corpus/run.py` | `research/results/phase7_pdf_corpus.json` |
