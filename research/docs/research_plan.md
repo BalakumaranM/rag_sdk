@@ -231,7 +231,7 @@ HotpotQA exact_match, Standard may still win because it is less conservative.
 
 ---
 
-## Phase 6: Best-of-Breed Combination (Planned)
+## Phase 6: Best-of-Breed Combination (Built)
 
 Take the top performer from each phase and combine:
 
@@ -273,5 +273,5 @@ layouts. This phase tests whether our gains generalise.
 | 3 | ✅ Built + pushed | `research/phase3_retrieval/run.py` | `research/results/phase3_retrieval_<id>.json` |
 | 4 | ✅ Built + pushed | `research/phase4_reranking/run.py` | `research/results/phase4_reranking_<id>.json` |
 | 5 | ✅ Built + pushed | `research/phase5_generation/run.py` | `research/results/phase5_generation_<id>.json` |
-| 6 | ⬜ Planned | `research/phase6_best_combo/run.py` | — |
+| 6 | ✅ Built + pushed | `research/phase6_best_combo/run.py` | `research/results/phase6_best_combo_<id>.json` |
 | 7 | ⬜ Planned | `research/phase7_pdf_corpus/run.py` | — |
