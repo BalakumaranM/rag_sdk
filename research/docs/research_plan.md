@@ -148,7 +148,7 @@ f1                = 1.0
 
 ---
 
-## Phase 2: Chunking Ablation (Planned)
+## Phase 2: Chunking Ablation (Built)
 
 **What changes:** The splitter. Everything else (dense retrieval, standard generation) stays as Phase 1.
 
@@ -269,7 +269,7 @@ layouts. This phase tests whether our gains generalise.
 | Phase | Status | Script | Result file |
 |-------|--------|--------|-------------|
 | 1 | ✅ Built + pushed | `research/phase1_baseline/run.py` | `research/results/phase1_baseline.json` |
-| 2 | ⬜ Planned | `research/phase2_chunking/run.py` | — |
+| 2 | ✅ Built + pushed | `research/phase2_chunking/run.py` | `research/results/phase2_chunking_<id>.json` |
 | 3 | ⬜ Planned | `research/phase3_retrieval/run.py` | — |
 | 4 | ⬜ Planned | `research/phase4_reranking/run.py` | — |
 | 5 | ⬜ Planned | `research/phase5_generation/run.py` | — |
