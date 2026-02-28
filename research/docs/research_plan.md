@@ -197,7 +197,7 @@ don't, that is itself an important finding — it means the overhead isn't justi
 
 ---
 
-## Phase 4: Reranking Ablation (Planned)
+## Phase 4: Reranking Ablation (Built)
 
 **What changes:** Whether and how retrieved chunks are reranked before generation.
 Runs on top of the best retriever from Phase 3 (over-fetch 3× then rerank to top-5).
@@ -271,7 +271,7 @@ layouts. This phase tests whether our gains generalise.
 | 1 | ✅ Built + pushed | `research/phase1_baseline/run.py` | `research/results/phase1_baseline.json` |
 | 2 | ✅ Built + pushed | `research/phase2_chunking/run.py` | `research/results/phase2_chunking_<id>.json` |
 | 3 | ✅ Built + pushed | `research/phase3_retrieval/run.py` | `research/results/phase3_retrieval_<id>.json` |
-| 4 | ⬜ Planned | `research/phase4_reranking/run.py` | — |
+| 4 | ✅ Built + pushed | `research/phase4_reranking/run.py` | `research/results/phase4_reranking_<id>.json` |
 | 5 | ⬜ Planned | `research/phase5_generation/run.py` | — |
 | 6 | ⬜ Planned | `research/phase6_best_combo/run.py` | — |
 | 7 | ⬜ Planned | `research/phase7_pdf_corpus/run.py` | — |
