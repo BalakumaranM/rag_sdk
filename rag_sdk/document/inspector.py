@@ -20,6 +20,7 @@ Usage::
 
 import csv
 import math
+import sqlite3
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -293,6 +294,101 @@ class ChunkReport:
                         "content": c.content,
                     }
                 )
+        return out
+
+    def to_sqlite(
+        self,
+        path: Union[str, Path],
+        table: str = "chunks",
+        if_exists: str = "replace",
+    ) -> Path:
+        """Save every chunk to a SQLite database table.
+
+        Uses the stdlib ``sqlite3`` module — no external dependencies.
+        The resulting ``.db`` file can be opened with:
+
+        * **Datasette** (best visual UI)::
+
+            pip install datasette
+            datasette chunks.db          # opens http://localhost:8001
+
+        * **DB Browser for SQLite** (desktop app): https://sqlitebrowser.org/
+        * **DuckDB** (SQL queries + FTS)::
+
+            import duckdb
+            con = duckdb.connect()
+            con.execute("ATTACH 'chunks.db' AS chunkdb (TYPE sqlite)")
+            con.sql("SELECT * FROM chunkdb.chunks LIMIT 10").show()
+
+        Columns: index, doc_index, chunk_index, source, char_count, word_count, content
+
+        A full-text-search index on ``content`` is created automatically so
+        Datasette's search box works out of the box.
+
+        Args:
+            path: Destination ``.db`` file path (created or overwritten).
+            table: Table name inside the database (default ``"chunks"``).
+            if_exists: ``"replace"`` (default) drops and recreates the table;
+                ``"append"`` adds rows to an existing table.
+
+        Returns:
+            The resolved :class:`~pathlib.Path` that was written.
+
+        Example::
+
+            path = report.to_sqlite("chunks_phase2a.db")
+            # then: datasette chunks_phase2a.db
+        """
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+
+        con = sqlite3.connect(out)
+        try:
+            if if_exists == "replace":
+                con.execute(f"DROP TABLE IF EXISTS {table}")
+                con.execute(f"DROP TABLE IF EXISTS {table}_fts")
+
+            con.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {table} (
+                    idx          INTEGER,
+                    doc_index    INTEGER,
+                    chunk_index  INTEGER,
+                    source       TEXT,
+                    char_count   INTEGER,
+                    word_count   INTEGER,
+                    content      TEXT
+                )
+                """
+            )
+            con.executemany(
+                f"INSERT INTO {table} VALUES (?,?,?,?,?,?,?)",
+                [
+                    (
+                        c.index,
+                        c.doc_index,
+                        c.chunk_index,
+                        c.source,
+                        c.char_count,
+                        c.word_count,
+                        c.content,
+                    )
+                    for c in self.chunks
+                ],
+            )
+
+            # Full-text search index on content (FTS5) — enables Datasette search
+            con.execute(
+                f"""
+                CREATE VIRTUAL TABLE IF NOT EXISTS {table}_fts
+                USING fts5(content, content={table}, content_rowid=rowid)
+                """
+            )
+            con.execute(f"INSERT INTO {table}_fts({table}_fts) VALUES('rebuild')")
+            con.commit()
+        finally:
+            con.close()
+
         return out
 
 
