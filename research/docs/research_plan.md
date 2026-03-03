@@ -62,6 +62,112 @@ every question and each question runs in complete isolation.
 
 ---
 
+## Dataset: QASPER (added for chunking research)
+
+**Why HotpotQA is insufficient for chunking ablation**
+
+HotpotQA documents are pre-extracted Wikipedia paragraphs — typically 300–800 characters
+each. With a 512-character chunk size, most documents fit in a single chunk.
+Phase 2 (chunking ablation) produces near-identical numbers across all splitter variants
+because the splitter barely fires: the "documents" are already paragraph-sized.
+
+**Why QASPER**
+
+QASPER (Dasigi et al. 2021, Allen AI) is a QA dataset built from NLP research papers.
+Each document is a full paper — 6,000–12,000 tokens across 20–50 paragraphs.
+At chunk_size=512, one paper produces 40–100 chunks. Now chunking decisions genuinely
+matter: SemanticSplitter can align cuts to section boundaries, PropositionSplitter
+decomposes dense Methods sections into self-contained claims, and chunk_size differences
+produce measurably different retrieval pools.
+
+| Property | HotpotQA | QASPER |
+|---|---|---|
+| Document type | Wikipedia paragraphs | NLP research papers |
+| Avg document length | ~300–800 chars | ~8,000–12,000 tokens |
+| Chunks per doc (512 chars) | 1–2 | 40–100 |
+| QA ground truth | Yes (multi-hop) | Yes (expert-annotated) |
+| Evidence type | Article titles | Verbatim paragraph text |
+| Question types | bridge / comparison | extractive / abstractive / boolean |
+| Tests chunking boundaries | Barely | Strongly |
+
+**Which split**
+
+QASPER dev set: 281 papers, ~1,000 expert-annotated QA pairs.
+We use the first 100 non-unanswerable QA pairs for consistency with HotpotQA (100 questions).
+
+**Data format**
+
+```json
+{
+  "<paper_id>": {
+    "title": "...",
+    "abstract": "...",
+    "full_text": [
+      {"section_name": "Introduction", "paragraphs": ["para1", "para2"]},
+      {"section_name": "Methods",      "paragraphs": ["para3"]}
+    ],
+    "qas": [
+      {
+        "question": "What dataset is used?",
+        "question_id": "...",
+        "answers": [
+          {
+            "type": "extractive",
+            "free_form_answer": "SQuAD",
+            "evidence": ["para3 verbatim text"],
+            "highlighted_evidence": ["SQuAD"]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Answer types**
+
+- `extractive` — answer is a span copied from the paper; `highlighted_evidence` is the span
+- `abstractive` — free-form answer paraphrasing the paper; `free_form_answer` is the gold
+- `boolean` — yes/no question; `free_form_answer` is "Yes" or "No"
+- `unanswerable` — skipped entirely during loading
+
+**Getting the dataset**
+
+Download the dev JSON (inside a .tgz archive) from Allen AI's S3 bucket and place it
+at `research/data/qasper_dev_v0.3.json`:
+
+```bash
+# Option A — download and extract (internet required)
+curl -LO https://qasper-dataset.s3.us-west-2.amazonaws.com/qasper-train-dev-v0.3.tgz
+tar -xzf qasper-train-dev-v0.3.tgz qasper-dev-v0.3.json
+mv qasper-dev-v0.3.json research/data/
+
+# Option B — auto-download on first run (if S3 is accessible)
+.venv/bin/python research/phase1_baseline/run_qasper.py
+# The loader downloads and extracts automatically if research/data/qasper_dev_v0.3.json
+# does not exist.
+```
+
+`load_qasper()` always checks for the file first and skips the download if it exists —
+so manual placement works with no code changes needed.
+
+**Evaluation differences from HotpotQA**
+
+| Aspect | HotpotQA | QASPER |
+|---|---|---|
+| Gold context identifier | Article title (string) | Verbatim paragraph text |
+| context_recall | Retrieved titles ∩ gold titles | Chunk's source paragraph ∈ evidence set |
+| context_precision | Retrieved titles that are gold | Retrieved chunks whose paragraph is in evidence |
+| MRR | Rank of first gold-title chunk | Rank of first evidence-paragraph chunk |
+| EM / F1 | vs gold answer string | vs free_form_answer (or highlighted_evidence) |
+| Strata breakdowns | by_type (bridge/comparison), by_level (easy/medium/hard) | by_answer_type (extractive/abstractive/boolean) |
+
+Each chunk stores `paragraph_text` in its metadata (the original un-split paragraph).
+Evidence matching is exact: `chunk.metadata["paragraph_text"] in evidence_set`.
+This works because QASPER evidence is verbatim paragraph text from `full_text`.
+
+---
+
 ## Ingestion Pipeline (Per Question)
 
 For every HotpotQA sample, the experiment harness does this:
@@ -114,22 +220,67 @@ only after the fact to compute metrics.
 
 | Metric | Formula | What it measures |
 |--------|---------|-----------------|
-| `context_recall` | \|gold titles ∩ retrieved titles\| / \|gold titles\| | Did we retrieve ALL the evidence we needed? |
-| `context_precision` | \|retrieved titles that are gold\| / \|total retrieved\| | Are retrieved docs actually useful, or noisy? |
+| `context_recall` | \|gold titles ∩ retrieved titles\| / \|gold titles\| | Did we retrieve ALL the evidence we needed? (article level) |
+| `context_precision` | \|retrieved titles that are gold\| / \|total retrieved\| | Are retrieved docs actually useful, or noisy? (article level) |
+| `sentence_recall` | gold sentences found in retrieved chunks / total gold sentences | Did the *specific supporting sentences* land inside a retrieved chunk? Finer than title-level recall. |
+| `mrr` | 1 / rank of first gold doc | Ranking quality: gold at rank 1 → 1.0; gold at rank 5 → 0.2. Two runs with identical context_recall can differ drastically here. |
+| `hit_rate` | 1.0 if any retrieved doc is gold, else 0.0 | Binary floor: did we retrieve *anything* useful? Especially relevant for bridge questions where even one hop found is meaningful. |
 | `exact_match` | normalize(predicted) == normalize(gold) | Binary correctness |
 | `f1` | token-level F1(predicted, gold) | Partial credit for near-correct answers |
+| `faithfulness` | LLM-as-judge: fraction of answer claims grounded in context | Hallucination detection. **Opt-in** (`eval_faithfulness=True`), costs one extra LLM call per question. Off by default. |
 | `avg_latency` | mean wall-clock seconds per query | System speed |
+
+All metrics except `faithfulness` are computed with zero extra LLM calls and no external
+dependencies. `faithfulness` uses the same `llm_provider` already passed to `run_experiment`
+— no separate judge model or RAGAS dependency required (see *Why not RAGAS?* below).
+
+**Aggregate breakdowns (always computed, no extra cost):**
+
+Every result JSON also includes `metrics["by_type"]` and `metrics["by_level"]` containing
+the full metric set stratified by question type (bridge / comparison) and difficulty
+(easy / medium / hard). This prevents a retriever that excels on comparison questions but
+fails bridge questions from hiding behind an averaged score.
+
+**Why not RAGAS?**
+
+RAGAS was designed for evaluation *without* ground truth labels. We have HotpotQA gold
+labels, which are categorically superior:
+
+| RAGAS metric | Our equivalent | Why ours is better |
+|---|---|---|
+| Context Precision | `context_precision` | Gold labels beat LLM-as-judge |
+| Context Recall | `context_recall` | Gold labels beat LLM-as-judge |
+| Answer Relevancy | `exact_match` + `f1` | Ground truth beats embedding-similarity proxy |
+| Faithfulness | `faithfulness` (opt-in) | Implemented directly via our existing `llm_provider` |
+
+RAGAS also requires a separate judge LLM (typically the OpenAI API), adds a heavy
+dependency with its own versioning, and makes results harder to reproduce. The one metric
+RAGAS offers that our original harness lacked — faithfulness — is now implemented in the
+harness itself.
 
 **Example calculation for the Scott Derrickson question:**
 
 ```
 gold titles:       {"Scott Derrickson", "Ed Wood"}
-retrieved titles:  ["Scott Derrickson", "Ed Wood", "Marvel Cinematic Universe", "Horror film", "American film"]
+supporting_facts:  [("Scott Derrickson", 0), ("Ed Wood", 0)]
+  → gold sentences: ["Scott Derrickson (born July 16, 1966) is an American director.",
+                     "Ed Wood (born October 10, 1924) was an American filmmaker."]
 
-context_recall    = 2/2 = 1.0   (retrieved both gold docs — perfect)
+retrieved (in order): ["Scott Derrickson", "Ed Wood", "Marvel Cinematic Universe",
+                       "Horror film", "American film"]
+
+context_recall    = 2/2 = 1.0   (retrieved both gold titles — perfect)
 context_precision = 2/5 = 0.4   (3 of 5 retrieved were noise)
+sentence_recall   = 2/2 = 1.0   (both supporting sentences appear in retrieved chunks)
+mrr               = 1/1 = 1.0   (first gold doc is at rank 1)
+hit_rate          = 1.0         (at least one gold doc retrieved)
 exact_match       = 1.0         ("yes" == "yes")
 f1                = 1.0
+
+# MRR contrast — same recall, very different ranking:
+retrieved (buried): ["Horror film", "American film", "Marvel", "Ed Wood", "Scott Derrickson"]
+mrr               = 1/4 = 0.25  (first gold "Ed Wood" at rank 4)
+context_recall    = 1.0         (still retrieved both — recall is blind to order)
 ```
 
 ---
@@ -212,6 +363,12 @@ Runs on top of the best retriever from Phase 3 (over-fetch 3× then rerank to to
 but may not help recall (already-retrieved gold docs stay in the pool). The question
 is whether precision improvement is worth the added latency.
 
+**Key metrics for Phase 4:** `mrr` is the most sensitive signal here. Rerankers
+don't change *which* docs are in the candidate pool (recall is fixed by the upstream
+retriever), but they change the *order*. An improvement in `mrr` with no change in
+`context_recall` is exactly what a good reranker produces — gold docs are promoted
+to earlier ranks, giving the LLM cleaner leading context.
+
 ---
 
 ## Phase 5: Generation Strategy Ablation (Built)
@@ -228,6 +385,18 @@ Uses best chunker + best retriever from prior phases.
 **Expected learning:** CoVe should improve faithfulness at the cost of latency (3
 extra LLM calls). Attributed generation trades answer fluency for traceability. On
 HotpotQA exact_match, Standard may still win because it is less conservative.
+
+**Key metrics for Phase 5:** This is the one phase where `faithfulness` (opt-in) is
+worth enabling. Run Phase 5 with `eval_faithfulness=True` to directly measure whether
+CoVe reduces hallucination relative to Standard. Without `faithfulness`, you can only
+infer hallucination from EM/F1 misses — ambiguous, since a miss might be a retrieval
+failure rather than generation fabrication. The `faithfulness` metric resolves that
+ambiguity.
+
+**Note on Attributed (5c) EM/F1:** The LLM embeds citation markers like `[1]` and
+`[2]` in the answer. After metric normalisation, brackets are stripped but the digits
+remain (`"yes [1]"` → `"yes 1"`), adding extra tokens. Lower EM/F1 for 5c does not
+mean lower quality — it reflects the citation format, not accuracy.
 
 ---
 
@@ -266,6 +435,8 @@ layouts. This phase tests whether our gains generalise.
 
 ## Build Status
 
+### HotpotQA
+
 | Phase | Status | Script | Result file |
 |-------|--------|--------|-------------|
 | 1 | ✅ Built + pushed | `research/phase1_baseline/run.py` | `research/results/phase1_baseline.json` |
@@ -275,3 +446,83 @@ layouts. This phase tests whether our gains generalise.
 | 5 | ✅ Built + pushed | `research/phase5_generation/run.py` | `research/results/phase5_generation_<id>.json` |
 | 6 | ✅ Built + pushed | `research/phase6_best_combo/run.py` | `research/results/phase6_best_combo_<id>.json` |
 | 7 | ✅ Built + pushed | `research/phase7_pdf_corpus/run.py` | `research/results/phase7_pdf_corpus.json` |
+
+### QASPER
+
+| Phase | Status | Script | Result file |
+|-------|--------|--------|-------------|
+| 1 | ✅ Built + pushed | `research/phase1_baseline/run_qasper.py` | `research/results/phase1_baseline_qasper.json` |
+| 2 | ✅ Built + pushed | `research/phase2_chunking/run_qasper.py` | `research/results/phase2_chunking_<id>_qasper.json` |
+| 3 | ✅ Built + pushed | `research/phase3_retrieval/run_qasper.py` | `research/results/phase3_retrieval_<id>_qasper.json` |
+| 4 | ✅ Built + pushed | `research/phase4_reranking/run_qasper.py` | `research/results/phase4_reranking_<id>_qasper.json` |
+| 5 | ✅ Built + pushed | `research/phase5_generation/run_qasper.py` | `research/results/phase5_generation_<id>_qasper.json` |
+| 6 | ✅ Built + pushed | `research/phase6_best_combo/run_qasper.py` | `research/results/phase6_best_combo_qasper.json` |
+| 7 | ✅ Built + pushed | `research/phase7_pdf_corpus/run_qasper.py` | `research/results/phase7_qasper.json` |
+
+## SDK Tools
+
+### Chunk Inspector (`rag_sdk.document.inspector`)
+
+A standalone utility that shows exactly what a splitter produces from any set of
+documents — no vector store, no embeddings, no LLM calls.
+
+```python
+from rag_sdk.document import TextSplitter, SemanticSplitter, inspect_chunks
+
+splitter = TextSplitter(chunk_size=512, chunk_overlap=50)
+report = inspect_chunks(docs, splitter)
+
+report.summary()          # aggregate stats + size histogram
+report.table()            # every chunk as a fixed-width table row
+report.detail(3)          # full content of chunk #3
+report.for_source("Introduction [0]").table()  # filter to one source
+
+# Programmatic access — plain Python list of dataclasses
+tiny = [c for c in report.chunks if c.char_count < 100]
+
+# Optional: pandas DataFrame (requires: pip install pandas)
+df = report.to_dataframe()
+df.groupby("source").char_count.mean()
+df.sort_values("char_count", ascending=False)
+```
+
+**Why this matters for QASPER research:** calling `inspect_chunks` on a QASPER paper
+before running an experiment immediately reveals the difference — 40–100 chunks from
+a real paper vs 1–2 chunks from a HotpotQA paragraph. This validates the dataset
+choice and shows what each splitter actually does to long, structured documents.
+
+Phase 2 QASPER (`run_qasper.py --inspect`) prints a full chunk table for each
+splitter variant on the first paper without running the full evaluation.
+
+---
+
+## Harness Changelog
+
+### v2 — Evaluation harness expanded (`research/shared/harness.py`)
+
+**New metrics added** (all phases automatically benefit on next run):
+
+| Metric | Default | Cost | Primary diagnostic phase |
+|--------|---------|------|--------------------------|
+| `sentence_recall` | Always on | 0 extra calls | Phase 2 (chunking) |
+| `mrr` | Always on | 0 extra calls | Phase 4 (reranking) |
+| `hit_rate` | Always on | 0 extra calls | Phase 3 (retrieval) |
+| `faithfulness` | Opt-in | +1 LLM call/question | Phase 5 (generation) |
+
+**New aggregate breakdowns** (always computed):
+
+- `metrics["by_type"]["bridge"|"comparison"]` — HotpotQA question type strata
+- `metrics["by_level"]["easy"|"medium"|"hard"]` — HotpotQA difficulty strata
+
+**API change** (backward compatible — all existing callers unchanged):
+
+```python
+# New optional parameter added to run_experiment:
+run_experiment(..., eval_faithfulness=False)  # default: off
+
+# Enable for Phase 5 to measure hallucination directly:
+run_experiment(..., eval_faithfulness=True)
+```
+
+**No new dependencies.** `faithfulness` uses the same `llm_provider` already passed to
+`run_experiment`. RAGAS was evaluated and rejected — see *Why not RAGAS?* above.

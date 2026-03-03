@@ -11,17 +11,18 @@ LOCAL_EMBED_ENDPOINT = ""
 # ── Evaluation settings ────────────────────────────────────────────────────
 
 NUM_EVAL_QUESTIONS = 100
+NUM_QASPER_QUESTIONS = 100
 TOP_K = 5
-
-# ── Dataset ────────────────────────────────────────────────────────────────
-
-# HotpotQA dev distractor set — self-contained (10 passages per question)
-HOTPOTQA_DEV_URL = (
-    "http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_dev_distractor_v1.json"
-)
 
 # ── Paths ──────────────────────────────────────────────────────────────────
 
 RESEARCH_DIR = Path(__file__).parent.parent
 DATA_DIR = RESEARCH_DIR / "data"
 RESULTS_DIR = RESEARCH_DIR / "results"
+
+# ── Dataset file locations ──────────────────────────────────────────────────
+# Place these files here before running any experiment.
+# The loaders raise FileNotFoundError with download instructions if missing.
+
+HOTPOTQA_DATA_PATH = DATA_DIR / "hotpotqa_dev_distractor.json"
+QASPER_DATA_PATH = DATA_DIR / "qasper_dev_v0.3.json"

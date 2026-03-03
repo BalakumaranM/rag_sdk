@@ -2,10 +2,21 @@
 
 We use the *distractor* dev split — each question ships with exactly 10
 Wikipedia paragraphs (2 gold + 8 distractors), making it self-contained.
-No need to download all of Wikipedia.
 
-Distractor split URL (≈54 MB):
+Getting the data
+----------------
+Download the dev JSON and place it at ``research/data/hotpotqa_dev_distractor.json``:
+
+  https://huggingface.co/datasets/hotpot_qa  (distractor config, validation split)
+
+  OR direct download (≈54 MB):
   http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_dev_distractor_v1.json
+
+  Then rename / move the file to:
+  research/data/hotpotqa_dev_distractor.json
+
+``load_hotpotqa()`` raises ``FileNotFoundError`` with these instructions if the
+file is missing.
 
 Each example has:
   - question / answer
@@ -19,13 +30,23 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Set, Tuple
 
-import requests
-
 from rag_sdk.document.models import Document
 
-from .config import DATA_DIR, HOTPOTQA_DEV_URL
+from .config import DATA_DIR
 
 logger = logging.getLogger(__name__)
+
+_HOTPOTQA_INSTRUCTIONS = """
+HotpotQA dev file not found at: {path}
+
+Download it from one of these sources and place it there:
+  • HuggingFace:  https://huggingface.co/datasets/hotpot_qa
+                  (distractor config, validation split → export as JSON)
+  • Direct (~54 MB): http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_dev_distractor_v1.json
+
+Then rename / copy the file to:
+  {path}
+""".strip()
 
 
 @dataclass
@@ -63,30 +84,25 @@ class HotpotQASample:
 def load_hotpotqa(
     num_questions: int = 100,
     level: str = "all",
-    cache_path: Path = DATA_DIR / "hotpotqa_dev_distractor.json",
+    data_path: Path = DATA_DIR / "hotpotqa_dev_distractor.json",
 ) -> List[HotpotQASample]:
-    """Return ``num_questions`` samples from the HotpotQA distractor dev set.
-
-    Downloads and caches the file on first call (~54 MB).
+    """Return ``num_questions`` samples from the local HotpotQA distractor dev JSON.
 
     Args:
         num_questions: How many samples to return.
         level: Filter by difficulty — "easy", "medium", "hard", or "all".
-        cache_path: Where to cache the downloaded JSON.
+        data_path: Path to the local JSON file.
+
+    Raises:
+        FileNotFoundError: If the JSON file is not found at ``data_path``,
+            with instructions on where to download it.
     """
-    cache_path = Path(cache_path)
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    data_path = Path(data_path)
 
-    if not cache_path.exists():
-        logger.info("Downloading HotpotQA dev set to %s …", cache_path)
-        response = requests.get(HOTPOTQA_DEV_URL, timeout=120, stream=True)
-        response.raise_for_status()
-        with cache_path.open("wb") as fh:
-            for chunk in response.iter_content(chunk_size=8192):
-                fh.write(chunk)
-        logger.info("Download complete.")
+    if not data_path.exists():
+        raise FileNotFoundError(_HOTPOTQA_INSTRUCTIONS.format(path=data_path))
 
-    with cache_path.open() as fh:
+    with data_path.open() as fh:
         raw = json.load(fh)
 
     samples: List[HotpotQASample] = []

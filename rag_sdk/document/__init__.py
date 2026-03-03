@@ -2,6 +2,7 @@ from .models import Document
 from .loader import DocumentLoader
 from .base import BaseTextSplitter, BasePDFParser
 from .splitter import TextSplitter
+from .inspector import ChunkInfo, ChunkReport, inspect_chunks
 from .agentic_splitter import AgenticSplitter
 from .proposition_splitter import PropositionSplitter
 from .semantic_splitter import SemanticSplitter
@@ -34,6 +35,9 @@ __all__ = [
     "BaseTextSplitter",
     "BasePDFParser",
     "TextSplitter",
+    "ChunkInfo",
+    "ChunkReport",
+    "inspect_chunks",
     "AgenticSplitter",
     "PropositionSplitter",
     "SemanticSplitter",
