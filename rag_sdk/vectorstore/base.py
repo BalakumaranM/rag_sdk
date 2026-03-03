@@ -36,3 +36,14 @@ class VectorStoreProvider(ABC):
         Delete documents by ID.
         """
         pass
+
+    def dump_documents(self) -> List[Document]:
+        """Return all documents currently stored (for debugging / chunk logging).
+
+        Only required by stores that support full-scan.  Raises
+        ``NotImplementedError`` for stores that don't (Pinecone, Weaviate, …).
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support dump_documents(). "
+            "Use InMemoryVectorStore or implement the method in your store."
+        )

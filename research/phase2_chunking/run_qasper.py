@@ -285,9 +285,15 @@ def main() -> None:
     )
     parser.add_argument(
         "--chunks-out",
-        metavar="DIR",
-        help="With --inspect: save each variant's chunks to DIR/chunks_<id>.csv "
-        "(opens in Excel / pandas)",
+        metavar="PATH_OR_DIR",
+        help="Save chunk CSV at ingest time (opens in Excel / pandas). "
+        "With --inspect: saves per-variant CSVs to DIR/chunks_<id>.csv. "
+        "Without --inspect: saves all chunks from the full experiment run to PATH.",
+    )
+    parser.add_argument(
+        "--keep-chunk-log",
+        action="store_true",
+        help="Append to existing chunk log instead of overwriting.",
     )
     args = parser.parse_args()
 
@@ -349,6 +355,13 @@ def main() -> None:
             chunk_overlap=variant["chunk_overlap"],
         )
 
+        # Derive per-variant chunk log path when --chunks-out is a file path
+        # (treated as a prefix: chunks_2a.csv, chunks_2b.csv, etc.)
+        variant_log: Optional[Path] = None
+        if args.chunks_out and not args.inspect:
+            base = Path(args.chunks_out)
+            variant_log = base.parent / f"{base.stem}_{vid}{base.suffix}"
+
         try:
             result = run_qasper_experiment(
                 config=config,
@@ -358,6 +371,8 @@ def main() -> None:
                 experiment_name=_experiment_name(vid),
                 results_dir=RESULTS_DIR,
                 mode="per_question",
+                chunk_log_path=variant_log,
+                overwrite_chunk_log=not args.keep_chunk_log,
             )
         except ImportError as exc:
             logger.info("  [%s] Skipped — missing dependency: %s", vid, exc)

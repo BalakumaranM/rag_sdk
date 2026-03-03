@@ -63,6 +63,7 @@ Only HotpotQA-specific logic (sentence_recall, shared corpus building, etc.)
 remains in this file.
 """
 
+import csv
 import json
 import logging
 from pathlib import Path
@@ -98,6 +99,46 @@ except ImportError:
         for i, item in enumerate(items, 1):
             logger.info("  %s [%d/%d]", desc, i, len(items))
             yield item
+
+
+# ── Chunk logging ───────────────────────────────────────────────────────────
+
+_CHUNK_LOG_FIELDS = [
+    "doc_id",
+    "question_id",
+    "source",
+    "chunk_index",
+    "char_count",
+    "word_count",
+    "content",
+]
+
+
+def _write_chunk_log(
+    chunks: List[Document],
+    path: Path,
+    question_id: str,
+    first: bool,
+) -> None:
+    """Append chunk rows (tagged with question_id) to a CSV log file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    mode = "w" if first else "a"
+    with path.open(mode, newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=_CHUNK_LOG_FIELDS)
+        if first:
+            writer.writeheader()
+        for chunk in chunks:
+            writer.writerow(
+                {
+                    "doc_id": chunk.id,
+                    "question_id": question_id,
+                    "source": chunk.metadata.get("source", ""),
+                    "chunk_index": chunk.metadata.get("chunk_index", ""),
+                    "char_count": len(chunk.content),
+                    "word_count": len(chunk.content.split()),
+                    "content": chunk.content,
+                }
+            )
 
 
 # ── HotpotQA-specific metric ────────────────────────────────────────────────
@@ -216,12 +257,31 @@ def _run_per_question(
     desc: str,
     llm_provider: Optional[LLMProvider] = None,
     eval_faithfulness: bool = False,
+    chunk_log_path: Optional[Path] = None,
 ) -> List[Dict[str, Any]]:
     """Clear → ingest 10 docs → query, repeated for each sample."""
     rows = []
-    for sample in tqdm(samples, desc=desc):
+    for i, sample in enumerate(tqdm(samples, desc=desc)):
         rag.clear_index()
         rag.ingest_documents(sample.to_documents())
+
+        if chunk_log_path is not None:
+            try:
+                chunks = rag.vector_store.dump_documents()
+                _write_chunk_log(chunks, chunk_log_path, sample.id, first=(i == 0))
+                logger.info(
+                    "  Chunk log: %d chunks (question %s) → %s",
+                    len(chunks),
+                    sample.id,
+                    chunk_log_path,
+                )
+            except NotImplementedError:
+                logger.warning(
+                    "Chunk logging skipped: %s does not support dump_documents().",
+                    type(rag.vector_store).__name__,
+                )
+                chunk_log_path = None  # stop trying
+
         rows.append(
             _eval_row(
                 sample,
@@ -239,11 +299,28 @@ def _run_shared_corpus(
     desc: str,
     llm_provider: Optional[LLMProvider] = None,
     eval_faithfulness: bool = False,
+    chunk_log_path: Optional[Path] = None,
 ) -> List[Dict[str, Any]]:
     """Ingest all unique docs once, query every sample against the shared corpus."""
     corpus = _build_shared_corpus(samples)
     logger.info("Ingesting shared corpus (%d documents)…", len(corpus))
     rag.ingest_documents(corpus)
+
+    if chunk_log_path is not None:
+        try:
+            chunks = rag.vector_store.dump_documents()
+            _write_chunk_log(chunks, chunk_log_path, question_id="shared", first=True)
+            logger.info(
+                "  Chunk log: %d chunks (shared corpus) → %s",
+                len(chunks),
+                chunk_log_path,
+            )
+        except NotImplementedError:
+            logger.warning(
+                "Chunk logging skipped: %s does not support dump_documents().",
+                type(rag.vector_store).__name__,
+            )
+
     rows = []
     for sample in tqdm(samples, desc=desc):
         rows.append(
@@ -283,6 +360,8 @@ def run_experiment(
     results_dir: Path = RESULTS_DIR,
     mode: str = "per_question",
     eval_faithfulness: bool = False,
+    chunk_log_path: Optional[Path] = None,
+    overwrite_chunk_log: bool = True,
 ) -> Dict[str, Any]:
     """Run the evaluation loop for one configuration.
 
@@ -314,6 +393,14 @@ def run_experiment(
     results_dir = Path(results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
 
+    # Handle chunk log file
+    log_path: Optional[Path] = None
+    if chunk_log_path is not None:
+        log_path = Path(chunk_log_path)
+        if overwrite_chunk_log and log_path.exists():
+            log_path.unlink()
+            logger.info("Chunk log cleared: %s", log_path)
+
     rag = RAG(config, embedding_provider=embedding_provider, llm_provider=llm_provider)
 
     logger.info("Running %s [mode=%s, n=%d]", experiment_name, mode, len(samples))
@@ -327,6 +414,7 @@ def run_experiment(
             desc=experiment_name,
             llm_provider=faith_llm,
             eval_faithfulness=eval_faithfulness,
+            chunk_log_path=log_path,
         )
     else:
         rows = _run_shared_corpus(
@@ -335,6 +423,7 @@ def run_experiment(
             desc=experiment_name,
             llm_provider=faith_llm,
             eval_faithfulness=eval_faithfulness,
+            chunk_log_path=log_path,
         )
 
     # Metric keys present in every row

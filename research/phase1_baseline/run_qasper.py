@@ -30,7 +30,12 @@ Run
   .venv/bin/python research/phase1_baseline/run_qasper.py
 
   # Save chunk CSV for offline browsing (opens in Excel / pandas):
+  # Chunks are saved at actual ingestion time — one row per indexed chunk,
+  # one unique paper per run (multiple questions from the same paper log it once).
   .venv/bin/python research/phase1_baseline/run_qasper.py --chunks-out research/results/chunks_phase1.csv
+
+  # Append to an existing log instead of overwriting:
+  .venv/bin/python research/phase1_baseline/run_qasper.py --chunks-out research/results/chunks_phase1.csv --keep-chunk-log
 """
 
 import argparse
@@ -62,8 +67,14 @@ def main() -> None:
     parser.add_argument(
         "--chunks-out",
         metavar="PATH",
-        help="Save chunk CSV for offline browsing (Excel / pandas). "
-        "Example: research/results/chunks_phase1.csv",
+        help="Save chunk CSV at ingest time for offline browsing (Excel / pandas). "
+        "Columns: doc_id, paper_id, source, chunk_index, char_count, word_count, content. "
+        "Each unique paper is logged once (overwritten by default, see --keep-chunk-log).",
+    )
+    parser.add_argument(
+        "--keep-chunk-log",
+        action="store_true",
+        help="Append to an existing chunk log instead of overwriting it.",
     )
     args = parser.parse_args()
 
@@ -78,20 +89,15 @@ def main() -> None:
 
     samples = load_qasper(num_questions=NUM_QASPER_QUESTIONS)
 
-    # ── Chunk inspection on the first sample ─────────────────────────────────
-    # Shows what 512-char splitting produces on a real paper vs HotpotQA.
+    # ── Chunk inspection preview (first paper only, terminal only) ────────────
     logger.info("── Chunk inspection (first paper, TextSplitter 512/50) ──────")
     splitter = TextSplitter(chunk_size=512, chunk_overlap=50)
-    sample_docs = samples[0].to_documents()
-    report = inspect_chunks(sample_docs, splitter)
+    report = inspect_chunks(samples[0].to_documents(), splitter)
     report.summary()
-
-    if args.chunks_out:
-        csv_path = report.to_csv(args.chunks_out)
-        logger.info("  Chunks saved → %s", csv_path)
     logger.info("")
 
     # ── Run experiment ────────────────────────────────────────────────────────
+    # --chunks-out logs ALL papers at actual ingest time (not just the first).
     config = make_config(
         chunking_strategy="recursive",
         retrieval_strategy="dense",
@@ -108,6 +114,8 @@ def main() -> None:
         experiment_name="phase1_baseline",
         results_dir=RESULTS_DIR,
         mode="per_question",
+        chunk_log_path=Path(args.chunks_out) if args.chunks_out else None,
+        overwrite_chunk_log=not args.keep_chunk_log,
     )
 
     m = result["metrics"]

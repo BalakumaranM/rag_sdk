@@ -99,3 +99,7 @@ class InMemoryVectorStore(VectorStoreProvider):
                 self._id_list.remove(doc_id)
 
         self._rebuild_matrix()
+
+    def dump_documents(self) -> List[Document]:
+        """Return all currently stored chunk Documents in insertion order."""
+        return [self.documents[doc_id] for doc_id in self._id_list]
