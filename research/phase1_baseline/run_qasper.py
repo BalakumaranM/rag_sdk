@@ -28,8 +28,12 @@ Configuration
 Run
 ---
   .venv/bin/python research/phase1_baseline/run_qasper.py
+
+  # Save chunk CSV for offline browsing (opens in Excel / pandas):
+  .venv/bin/python research/phase1_baseline/run_qasper.py --chunks-out research/results/chunks_phase1.csv
 """
 
+import argparse
 import logging
 import sys
 from pathlib import Path
@@ -54,6 +58,15 @@ if not logger.handlers:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Phase 1: Baseline [QASPER]")
+    parser.add_argument(
+        "--chunks-out",
+        metavar="PATH",
+        help="Save chunk CSV for offline browsing (Excel / pandas). "
+        "Example: research/results/chunks_phase1.csv",
+    )
+    args = parser.parse_args()
+
     logger.info("=" * 60)
     logger.info("Phase 1 — Baseline  [QASPER]")
     logger.info("=" * 60)
@@ -72,6 +85,10 @@ def main() -> None:
     sample_docs = samples[0].to_documents()
     report = inspect_chunks(sample_docs, splitter)
     report.summary()
+
+    if args.chunks_out:
+        csv_path = report.to_csv(args.chunks_out)
+        logger.info("  Chunks saved → %s", csv_path)
     logger.info("")
 
     # ── Run experiment ────────────────────────────────────────────────────────

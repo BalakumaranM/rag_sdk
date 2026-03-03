@@ -42,6 +42,9 @@ Usage
   # Inspect chunk output for each variant (first paper only, no full eval):
   .venv/bin/python research/phase2_chunking/run_qasper.py --inspect
 
+  # Inspect + save CSVs for offline browsing (Excel / pandas):
+  .venv/bin/python research/phase2_chunking/run_qasper.py --inspect --chunks-out research/results/chunks/
+
   # Re-run even if a result file exists:
   .venv/bin/python research/phase2_chunking/run_qasper.py --force
 """
@@ -185,8 +188,17 @@ def _make_splitter(variant: Dict[str, Any], llm: Any) -> Any:
     return None
 
 
-def _run_inspect(samples: Any, to_run: List[Dict[str, Any]], llm: Any) -> None:
-    """Print chunk inspection tables for the first paper for each variant."""
+def _run_inspect(
+    samples: Any,
+    to_run: List[Dict[str, Any]],
+    llm: Any,
+    chunks_out_dir: Optional[Path] = None,
+) -> None:
+    """Print chunk inspection tables for the first paper for each variant.
+
+    If ``chunks_out_dir`` is given, each variant's chunks are saved to
+    ``<dir>/chunks_<variant_id>.csv`` for offline browsing in Excel / pandas.
+    """
     first_docs = samples[0].to_documents()
     paper_id = samples[0].paper_id
     logger.info("")
@@ -209,6 +221,11 @@ def _run_inspect(samples: Any, to_run: List[Dict[str, Any]], llm: Any) -> None:
         logger.info("── %s (%s) ─────────────", variant["id"], variant["label"])
         report.summary()
         report.table()
+
+        if chunks_out_dir is not None:
+            csv_path = report.to_csv(chunks_out_dir / f"chunks_{variant['id']}.csv")
+            logger.info("  Saved → %s", csv_path)
+
         logger.info("")
 
 
@@ -266,6 +283,12 @@ def main() -> None:
         action="store_true",
         help="Print chunk inspection table for each variant on the first paper, then exit",
     )
+    parser.add_argument(
+        "--chunks-out",
+        metavar="DIR",
+        help="With --inspect: save each variant's chunks to DIR/chunks_<id>.csv "
+        "(opens in Excel / pandas)",
+    )
     args = parser.parse_args()
 
     if args.variants:
@@ -294,7 +317,8 @@ def main() -> None:
     llm = make_llm()
 
     if args.inspect:
-        _run_inspect(samples, to_run, llm)
+        chunks_out_dir = Path(args.chunks_out) if args.chunks_out else None
+        _run_inspect(samples, to_run, llm, chunks_out_dir=chunks_out_dir)
         return
 
     completed: List[Dict[str, Any]] = []

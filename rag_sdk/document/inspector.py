@@ -18,10 +18,12 @@ Usage::
     sub.table()
 """
 
+import csv
 import math
 import sys
 from dataclasses import dataclass
-from typing import Any, List
+from pathlib import Path
+from typing import Any, List, Union
 
 from .base import BaseTextSplitter
 from .models import Document
@@ -242,6 +244,56 @@ class ChunkReport:
                 for c in self.chunks
             ]
         )
+
+    def to_csv(self, path: Union[str, Path]) -> Path:
+        """Save every chunk to a CSV file for offline browsing.
+
+        No external dependencies — uses the stdlib ``csv`` module.
+        Opens cleanly in Excel, Numbers, or any pandas/SQL workflow.
+
+        Columns: index, doc_index, chunk_index, source, char_count, word_count, content
+
+        Args:
+            path: Destination file path (created or overwritten).
+
+        Returns:
+            The resolved :class:`~pathlib.Path` that was written.
+
+        Example::
+
+            path = report.to_csv("chunks_phase2a.csv")
+            # open in Excel, or:
+            import pandas as pd
+            df = pd.read_csv(path)
+            df[df.char_count < 100]
+        """
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        fields = [
+            "index",
+            "doc_index",
+            "chunk_index",
+            "source",
+            "char_count",
+            "word_count",
+            "content",
+        ]
+        with out.open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=fields)
+            writer.writeheader()
+            for c in self.chunks:
+                writer.writerow(
+                    {
+                        "index": c.index,
+                        "doc_index": c.doc_index,
+                        "chunk_index": c.chunk_index,
+                        "source": c.source,
+                        "char_count": c.char_count,
+                        "word_count": c.word_count,
+                        "content": c.content,
+                    }
+                )
+        return out
 
 
 def inspect_chunks(
