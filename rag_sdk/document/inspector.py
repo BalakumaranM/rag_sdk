@@ -20,6 +20,7 @@ Usage::
 
 import csv
 import math
+import re
 import sqlite3
 import sys
 from dataclasses import dataclass
@@ -28,6 +29,8 @@ from typing import Any, List, Union
 
 from .base import BaseTextSplitter
 from .models import Document
+
+_SAFE_IDENTIFIER = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
 def _out(text: str = "") -> None:
@@ -339,6 +342,12 @@ class ChunkReport:
             path = report.to_sqlite("chunks_phase2a.db")
             # then: datasette chunks_phase2a.db
         """
+        if not _SAFE_IDENTIFIER.match(table):
+            raise ValueError(
+                f"table name {table!r} is not a safe SQL identifier. "
+                "Use only letters, digits, and underscores, starting with a letter or underscore."
+            )
+
         out = Path(path)
         out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -362,7 +371,7 @@ class ChunkReport:
                 """
             )
             con.executemany(
-                f"INSERT INTO {table} VALUES (?,?,?,?,?,?,?)",
+                f"INSERT INTO {table} VALUES (?,?,?,?,?,?,?)",  # nosec B608
                 [
                     (
                         c.index,
@@ -384,7 +393,7 @@ class ChunkReport:
                 USING fts5(content, content={table}, content_rowid=rowid)
                 """
             )
-            con.execute(f"INSERT INTO {table}_fts({table}_fts) VALUES('rebuild')")
+            con.execute(f"INSERT INTO {table}_fts({table}_fts) VALUES('rebuild')")  # nosec B608
             con.commit()
         finally:
             con.close()
